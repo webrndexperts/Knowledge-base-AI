@@ -1,0 +1,23 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+
+    paths:
+        - app/
+
+    # Level 10 is the highest level
+    level: 5
+
+    ignoreErrors:
+        - '#PHPDoc tag @var#'
+        - '#Call to an undefined method .*badMethod\(\)#'
+        - '#Call to an undefined static method Jubaer\\Zoom\\Facades\\Zoom::(createMeeting|deleteMeeting|endMeeting|updateMeeting|getMeeting|getAllMeeting|getUpcomingMeeting|getPreviousMeetings|rescheduleMeeting|recoverMeeting|getUsers)\(\)#'
+        - '#Call to an undefined method Illuminate\\Contracts\\Auth\\Factory::user#'
+
+        
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false
+
+#    excludePaths:
+#        - ./*/*/FileToBeExcluded.php

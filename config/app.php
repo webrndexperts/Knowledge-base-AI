@@ -123,4 +123,21 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | pdftotext binary path
+    |--------------------------------------------------------------------------
+    |
+    | This tells Laravel where to find the "pdftotext" executable from Poppler.
+    | - On Linux/macOS: you can usually leave it as "pdftotext" if Poppler is
+    |   installed and available in your system PATH.
+    | - On Windows: set the full path to pdftotext.exe, for example:
+    |   "C:/tools/poppler/bin/pdftotext.exe"
+    |
+    | You can override this in your .env file:
+    |   PDFTOTEXT_PATH="C:/tools/poppler/bin/pdftotext.exe"
+    |
+    */
+
+    'pdftotext_path' => env('PDFTOTEXT_PATH', 'pdftotext'),
 ];
