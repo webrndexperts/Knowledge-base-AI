@@ -39,22 +39,17 @@ class UserTable extends DataTableComponent
 
     public function builder(): Builder
     {
-        $query = User::withCount(['conversations', 'queries'])
-            ->whereDoesntHave('roles', function ($q) {
-                $q->where('name', 'admin');
-            });
-
-        if(!auth()->user()->isAdmin()) {
-            $query = $query->where('created_by', auth()->id());
-        }
-
+        $query = User::with(['creator', 'conversations'])
+            ->withRoles()
+            ->withoutAdmin();
+            // ->withCount(['conversations', 'queries']);
 
         return $query->select('users.*');
     }
 
     public function columns(): array
     {
-        return [
+        $columns = [
             Column::make('S.No')
                 ->label(function ($row) {
                     $currentPage = $this->getPage();
@@ -69,19 +64,7 @@ class UserTable extends DataTableComponent
 
             Column::make("User Info")
                 ->label(function ($row) {
-                    return '<div class="flex items-center space-x-3">
-                        <div class="flex-shrink-0 h-10 w-10">
-                            <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                                <span class="text-sm font-medium text-gray-700">' . 
-                                    substr($row->name, 0, 2) . 
-                                '</span>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="text-sm font-medium text-gray-900">' . $row->name . '</div>
-                            <div class="text-sm text-gray-500">' . $row->email . '</div>
-                        </div>
-                    </div>';
+                    return view('actions.users.info', ['row' => $row])->render();
                 })
                 ->searchable(function (Builder $query, $searchTerm) {
                     return $query->where('name', 'like', '%' . $searchTerm . '%')
@@ -95,28 +78,14 @@ class UserTable extends DataTableComponent
             Column::make("Email Verified", "email_verified_at")
                 ->sortable()
                 ->format(function ($value) {
-                    if ($value) {
-                        return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-                            </svg>
-                            Verified
-                        </span>';
-                    } else {
-                        return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                            </svg>
-                            Unverified
-                        </span>';
-                    }
+                    return view('actions.users.verified', ['value' => $value])->render();
                 })
                 ->html(),
 
             Column::make("Conversations")
                 ->label(function ($row) {
                     return '<div class="text-center">
-                        <div class="text-sm font-medium text-gray-900">' . $row->conversations_count . '</div>
+                        <div class="text-sm font-medium text-gray-900">' . count($row->conversations) . '</div>
                         <div class="text-xs text-gray-500">conversations</div>
                     </div>';
                 })
@@ -125,26 +94,54 @@ class UserTable extends DataTableComponent
                 })
                 ->html(),
 
-            Column::make("Queries")
+            // Column::make("Queries")
+            //     ->label(function ($row) {
+            //         return '<div class="text-center">
+            //             <div class="text-sm font-medium text-gray-900">' . $row->queries_count . '</div>
+            //             <div class="text-xs text-gray-500">queries</div>
+            //         </div>';
+            //     })
+            //     ->sortable(function (Builder $query, string $direction) {
+            //         return $query->orderBy('queries_count', $direction);
+            //     })
+            //     ->html(),
+        ];
+
+        // Only show "Created By" column for admin users
+        if(auth()->user()->isAdmin()) {
+            $columns[] = Column::make("Created By")
                 ->label(function ($row) {
-                    return '<div class="text-center">
-                        <div class="text-sm font-medium text-gray-900">' . $row->queries_count . '</div>
-                        <div class="text-xs text-gray-500">queries</div>
-                    </div>';
+                    if ($row->creator) {
+                        return '<div class="text-sm">
+                            <div class="font-medium text-gray-900 dark:text-white">' . $row->creator->name . '</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">' . $row->creator->email . '</div>
+                        </div>';
+                    } else {
+                        return '<span class="text-sm text-gray-500 dark:text-gray-400">System</span>';
+                    }
+                })
+                ->searchable(function (Builder $query, $searchTerm) {
+                    return $query->whereHas('creator', function ($q) use ($searchTerm) {
+                        $q->where('name', 'like', '%' . $searchTerm . '%')
+                            ->orWhere('email', 'like', '%' . $searchTerm . '%');
+                    });
                 })
                 ->sortable(function (Builder $query, string $direction) {
-                    return $query->orderBy('queries_count', $direction);
+                    return $query->leftJoin('users as creators', 'users.created_by', '=', 'creators.id')
+                        ->orderBy('creators.name', $direction);
                 })
-                ->html(),
+                ->html();
+        }
 
-            Column::make("Joined", "created_at")
-                ->sortable()
-                ->format(fn($value) => $value->format('M j, Y')),
+        $columns[] = Column::make("Joined", "created_at")
+            ->sortable()
+            ->format(fn($value) => $value->format('M j, Y'));
 
-            Column::make('Actions')
-                ->label(fn ($row) => view('actions.users.index', ['row' => $row])->render())
-                ->html(),
-        ];
+        $columns[] = Column::make('Actions')
+            ->label(fn ($row) => view('actions.users.index', ['row' => $row])->render())
+            ->html();
+
+        return $columns;
     }
 
     public function delete($id): void

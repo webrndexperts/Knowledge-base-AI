@@ -66,10 +66,17 @@ class User extends Authenticatable
         return $this->hasRole('admin');
     }
 
+    public function scopeWithoutAdmin($query)
+    {
+        return $query->whereDoesntHave('roles', function ($q) {
+            $q->where('name', 'admin');
+        });
+    }
+
     public function scopeWithRoles($query)
     {
         if (! auth()->user()->isAdmin()) {
-            // $query->where('users.created_by', auth()->id());
+            $query->where('users.created_by', auth()->id());
         }
 
         return $query;
@@ -83,5 +90,10 @@ class User extends Authenticatable
     public function queries()
     {
         return $this->hasMany(Query::class);
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }
