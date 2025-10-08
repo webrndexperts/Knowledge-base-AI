@@ -46,4 +46,17 @@ return [
     */
 
     'request_timeout' => env('OPENAI_REQUEST_TIMEOUT', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | OpenAI Models
+    |--------------------------------------------------------------------------
+    |
+    | Here you may specify which OpenAI models to use for different tasks.
+    | - embedding_model: Used for generating text embeddings
+    | - chat_model: Used for generating chat responses
+    */
+
+    'embedding_model' => env('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small'),
+    'chat_model' => env('OPENAI_CHAT_MODEL', 'gpt-4o-mini'),
 ];

@@ -54,14 +54,6 @@ class AIService
      */
     public function fastSearch(string $question): array
     {
-        // Try cache first for common queries
-        $cacheKey = 'fast_search_' . md5(strtolower(trim($question)) . '_' . (Auth::id() ?? 'guest'));
-        $cached = Cache::get($cacheKey);
-        
-        if ($cached) {
-            return $cached;
-        }
-
         try {
             // Extract keywords from the question
             $keywords = $this->extractKeywords($question);
@@ -137,15 +129,10 @@ class AIService
                 $responseText .= "*Found " . count($results) . " total matches. Showing top 3 results.*";
             }
 
-            $result = [
+            return [
                 'text' => $responseText,
                 'sources' => array_slice($sources, 0, 8) // Limit sources
             ];
-
-            // Cache the result for 10 minutes
-            Cache::put($cacheKey, $result, 600);
-
-            return $result;
 
         } catch (\Exception $e) {
             Log::error('Error in AIService->fastSearch', [

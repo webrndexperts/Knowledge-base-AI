@@ -7,18 +7,35 @@
 
     <flux:navlist variant="outline">
         <flux:navlist.group :heading="__('Platform')" class="grid">
-            <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
+            {{-- Dashboard Routes --}}
+            <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                {{ __('messages.sidebar.dashboard') }}
+            </flux:navlist.item>
 
-            <flux:navlist.item icon="home" :href="route('upload.pdf')" :current="request()->routeIs('upload.pdf')" wire:navigate>{{ __('messages.sidebar.pdf') }}</flux:navlist.item>
+
+            {{-- Articles Route --}}
+            <flux:navlist.group expandable heading="{{ __('messages.sidebar.articles') }}" class="grid" :current="request() -> routeIs('articles.*')">
+                <flux:navlist.item icon="plus" :href="route('articles.upload.pdf')" :current="request() -> routeIs('articles.upload.pdf')" wire:navigate>
+                    {{ __('messages.sidebar.pdf') }}
+                </flux:navlist.item>
+                
+                <flux:navlist.item icon="table-cells" :href="route('articles.list')" :current="request() -> routeIs('articles.list')" wire:navigate>
+                    {{ __('messages.sidebar.list') }}
+                </flux:navlist.item>
+            </flux:navlist.group>
+
         </flux:navlist.group>
     </flux:navlist>
 
     <flux:spacer />
 
     <flux:navlist variant="outline">
-        {{-- <flux:navlist.item icon="folder-git-2" href="{{ route('upload.pdf') }}" target="_blank">
-        {{ __('messages.sidebar.pdf') }}
-        </flux:navlist.item> --}}
+        {{-- Users Routes --}}
+        @can('viewAny', App\Models\User::class)
+            <flux:navlist.item icon="users" :href="route('users.index')" :current="request()->routeIs('users.index')" wire:navigate>
+                {{ __('messages.sidebar.users') }}
+            </flux:navlist.item>
+        @endcan
     </flux:navlist>
 
     <!-- Desktop User Menu -->

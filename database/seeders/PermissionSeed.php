@@ -22,6 +22,7 @@ class PermissionSeed extends Seeder
             'Edit User',
             'Delete User',
             'Can Upload PDF',
+            'Can Check Conversations',
         ];
 
         foreach ($permissions as $permission) {

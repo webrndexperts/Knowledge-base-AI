@@ -57,6 +57,7 @@ class PdfService
     public function extractNativeText(string $pdfPath, int $pageNum): string
     {
         try {
+            $pdfPath = str_replace('/', DIRECTORY_SEPARATOR, $pdfPath);
             $text = (new Pdf($this->pdftotextPath))
                 ->setPdf($pdfPath)
                 // ->setPage($pageNum)

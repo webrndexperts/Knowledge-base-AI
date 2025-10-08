@@ -41,6 +41,7 @@ class PdfUploader extends Component
         $path = $this->file->store('documents', 'public');
 
         $article = Article::create([
+            'user_id' => auth()->id(),
             'title' => $this->file->getClientOriginalName(),
             'file_path' => $path,
             'file_type' => $this->file->extension(),
@@ -51,7 +52,7 @@ class PdfUploader extends Component
             $checkService->check($this->file, $article);
 
             $this->dispatch('notify', message: __('messages.notify.success.pdf-upload'));
-            $this->file = null;
+            // $this->file = null;
         } catch (\Exception $e) {
             $this->dispatch('notify', message: $e->getMessage(), type: 'error');
         }

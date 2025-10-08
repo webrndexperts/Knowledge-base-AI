@@ -8,11 +8,19 @@ return [
         'update' => 'Update',
         'upload' => 'Upload :file_type here',
         'permission-403' => "You don't have permissions to access the page.",
+        'create' => 'Create',
+        'back' => 'Back',
+        'edit' => 'Edit',
+        'delete' => 'Delete',
     ],
     'sidebar' => [
         'dashboard' => 'Dashboard',
         'pdf' => 'Upload PDF',
         'settings' => 'Settings',
+        'users' => 'Users',
+        'articles' => 'Articles',
+        'conversation' => 'Conversations',
+        'list' => 'List'
     ],
     'notify' => [
         'success' => [
@@ -21,5 +29,7 @@ return [
     ],
     'title' => [
         'home' => 'Home',
+        'articles' => 'Articles',
+        'users' => 'Users',
     ],
 ];

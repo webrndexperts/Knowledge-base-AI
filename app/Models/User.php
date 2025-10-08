@@ -20,6 +20,7 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'created_by',
         'name',
         'email',
         'password',
@@ -72,5 +73,15 @@ class User extends Authenticatable
         }
 
         return $query;
+    }
+
+    public function conversations()
+    {
+        return $this->hasMany(Conversation::class);
+    }
+
+    public function queries()
+    {
+        return $this->hasMany(Query::class);
     }
 }

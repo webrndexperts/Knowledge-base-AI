@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Route;
 // })->name('home');
 
 Route::get('/', Home::class)->name('home');
+Route::get('/conversation/{encryptedId}', Home::class)->name('conversation.show');
 
 Route::view('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])

@@ -51,12 +51,12 @@ class FileProcessingService
                 // Generate embedding for combined text
                 $combinedText = $nativeText."\n".$ocrText;
                 if (trim($combinedText) !== '') {
-                    $embedding = $ai->generateEmbedding($combinedText);
-                    Embedding::create([
-                        'embeddable_id' => $articlePage->id,
-                        'embeddable_type' => ArticlePage::class,
-                        'embedding' => $embedding,
-                    ]);
+                    // $embedding = $ai->generateEmbedding($combinedText);
+                    // Embedding::create([
+                    //     'embeddable_id' => $articlePage->id,
+                    //     'embeddable_type' => ArticlePage::class,
+                    //     'embedding' => $embedding,
+                    // ]);
                 }
 
                 // Extract embedded images inside page
@@ -90,12 +90,12 @@ class FileProcessingService
 
             // Generate embedding
             if (trim($ocr) !== '') {
-                $embedding = $ai->generateEmbedding($ocr);
-                Embedding::create([
-                    'embeddable_id' => $page->id,
-                    'embeddable_type' => ArticlePage::class,
-                    'embedding' => $embedding,
-                ]);
+                // $embedding = $ai->generateEmbedding($ocr);
+                // Embedding::create([
+                //     'embeddable_id' => $page->id,
+                //     'embeddable_type' => ArticlePage::class,
+                //     'embedding' => $embedding,
+                // ]);
             }
         } catch (\Exception $e) {
             Log::info('Error in FileProcessingService->processImage', ['error' => $e->getMessage()]);
@@ -115,31 +115,38 @@ class FileProcessingService
     {
         try {
             // Render each page as PNG to extract embedded images
+            $folder = "images/{$articlePage->id}";
+            $fileName = "tmp_page_{$articlePage->page_number}.png";
+
+            Storage::disk('public')->makeDirectory($folder);
+
             $page->setImageFormat('png');
-            // $tmpPath = storage_path("app/tmp_page_{$articlePage->page_number}.png");
-            $tmpPath = Storage::disk('public')->path("images/temp/tmp_page_{$articlePage->page_number}.png");
+            $tmpPath = storage_path("app/{$fileName}");
+            $path = storage_path("app/public/{$folder}/{$fileName}");
+
             $page->writeImage($tmpPath);
+            $page->writeImage($path);
 
             // Run OCR on extracted image
             // $ocr = (new TesseractOCR($tmpPath))->run();
-            $ocr = (new TesseractOCR($tmpPath))->run();
+            $ocr = (new TesseractOCR($path))->run();
 
             if (trim($ocr) !== '') {
                 $image = ArticleImage::create([
                     'article_page_id' => $articlePage->id,
-                    'image_path' => "tmp_page_{$articlePage->page_number}.png",
+                    'image_path' => "{$folder}/{$fileName}",
                     'ocr_text' => $ocr,
                 ]);
 
-                $embedding = $ai->generateEmbedding($ocr);
-                Embedding::create([
-                    'embeddable_id' => $image->id,
-                    'embeddable_type' => ArticleImage::class,
-                    'embedding' => $embedding,
-                ]);
+                // $embedding = $ai->generateEmbedding($ocr);
+                // Embedding::create([
+                //     'embeddable_id' => $image->id,
+                //     'embeddable_type' => ArticleImage::class,
+                //     'embedding' => $embedding,
+                // ]);
             }
 
-            unlink($tmpPath);
+            // unlink($tmpPath);
         } catch (\Exception $e) {
             Log::info('Error in FileProcessingService->extractImagesFromPage', ['error' => $e->getMessage()]);
         }

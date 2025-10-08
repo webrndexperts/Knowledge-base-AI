@@ -11,7 +11,7 @@ class UserPolicy
      */
     public function viewAny(User $user): bool
     {
-        return false;
+        return $user->isAdmin();
     }
 
     /**
@@ -19,7 +19,7 @@ class UserPolicy
      */
     public function view(User $user, User $model): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -27,7 +27,7 @@ class UserPolicy
      */
     public function create(User $user): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -35,7 +35,7 @@ class UserPolicy
      */
     public function update(User $user, User $model): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -43,7 +43,7 @@ class UserPolicy
      */
     public function delete(User $user, User $model): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -66,6 +66,14 @@ class UserPolicy
      * Determine whether the user can Upload knowledge based pdf.
      */
     public function uploadPdf(User $user): bool
+    {
+        return true;
+    }
+
+    /**
+     * Determine whether the user can Upload knowledge based pdf.
+     */
+    public function conversations(User $user): bool
     {
         return true;
     }
