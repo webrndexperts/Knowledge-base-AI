@@ -27,7 +27,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Conversations Management
     Route::prefix('conversations')->name('conversations.')->group(function () {
-        Route::get('/{userId}', ConversationManagement::class)->name('index');
+        Route::get('/user/{userId}', ConversationManagement::class)->name('index');
         Route::get('/{encryptedId}', ConversationDetail::class)->name('show');
     });
 });

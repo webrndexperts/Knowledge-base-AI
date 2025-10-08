@@ -71,10 +71,18 @@ class UserPolicy
     }
 
     /**
-     * Determine whether the user can Upload knowledge based pdf.
+     * Determine whether the user can check user conversations.
      */
     public function conversations(User $user): bool
     {
         return true;
+    }
+
+    /**
+     * Determine whether the user can see dashboard.
+     */
+    public function dashboard(User $user): bool
+    {
+        return $user->isAdmin();
     }
 }

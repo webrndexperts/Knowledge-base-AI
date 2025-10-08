@@ -9,6 +9,7 @@ class ConversationDetail extends Component
 {
     public $conversation;
     public $encryptedId;
+    public $userId;
 
     public function mount($encryptedId)
     {
@@ -34,6 +35,8 @@ class ConversationDetail extends Component
         if (!$this->conversation) {
             abort(404, 'Conversation not found');
         }
+
+        $this->userId = $this->conversation->user_id;
     }
 
     public function deleteConversation()
@@ -57,9 +60,7 @@ class ConversationDetail extends Component
 
     public function render()
     {
-        return view('livewire.backend.conversation-detail')->title(__('messages.title.articles'));
-            // ->layout('components.layouts.app.backend', [
-            //     'title' => 'Conversation Details - ' . ($this->conversation->title ?? 'Unknown')
-            // ]);
+        return view('livewire.backend.conversation-detail')
+            ->title(__('messages.title.articles'));
     }
 }
