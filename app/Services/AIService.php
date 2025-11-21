@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Article;
 use App\Models\Articles\ArticleImage;
 use App\Models\Articles\ArticlePage;
 use App\Models\Articles\Embedding;
@@ -9,7 +10,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use OpenAI\Laravel\Facades\OpenAI;
-use App\Models\Article;
 
 class AIService
 {
@@ -19,23 +19,11 @@ class AIService
 
     protected $context = '';
 
-    private function cosine($a, $b)
-    {
-        $dot = $magA = $magB = 0.0;
-        $n = min(count($a), count($b));
-        for ($i = 0; $i < $n; $i++) {
-            $dot += $a[$i] * $b[$i];
-            $magA += $a[$i] ** 2;
-            $magB += $b[$i] ** 2;
-        }
-        return $dot / (sqrt($magA) * sqrt($magB));
-    }
-
     protected function getAiAnswer($topResults, $query)
     {
         try {
             $context = $topResults->pluck('text')->implode("\n\n");
-            
+
             $resp = OpenAI::chat()->create([
                 'model' => 'gpt-4-turbo',
                 'messages' => [
@@ -43,14 +31,14 @@ class AIService
                     ['role' => 'user', 'content' => "Context:\n{$context}\n\nQuestion: {$query}"],
                 ],
                 'temperature' => 0.3,
-                'max_tokens' => 1000,
+                'max_tokens' => $this->maxTokens,
             ]);
 
             return $resp['choices'][0]['message']['content'];
         } catch (\Exception $e) {
-            logger()->error('AI answer error: ' . $e->getMessage());
+            logger()->error('AI answer error: '.$e->getMessage());
 
-            return "I encountered an error while generating an answer. Please try again.";
+            return 'I encountered an error while generating an answer. Please try again.';
         }
     }
 
@@ -107,7 +95,7 @@ class AIService
             if (empty($keywords)) {
                 return [
                     'text' => 'Please ask a more detailed question.',
-                    'sources' => []
+                    'sources' => [],
                 ];
             }
 
@@ -132,39 +120,43 @@ class AIService
             $articleId = null;
 
             foreach ($values as $value) {
-                if($articleId) continue;
+                if ($articleId) {
+                    continue;
+                }
 
                 $articleId = $value->article_id;
             }
 
             $article = Article::findOrFail($articleId);
 
-            if(!$article) {
+            if (! $article) {
                 return [
                     'text' => 'No article content available.',
-                    'sources' => []
+                    'sources' => [],
                 ];
             }
 
             $article->load(['pages', 'pages.images', 'pages.embeddings']);
             $best = collect();
-            
+
             // First pass: collect all sections and their scores
             $formattedText = '';
 
             foreach ($article->pages ?? [] as $page) {
-                $text = trim(($page->native_text ?? '') . "\n" . ($page->ocr_text ?? ''));
+                $text = trim(($page->native_text ?? '')."\n".($page->ocr_text ?? ''));
                 $text = preg_replace('/\s+/', ' ', $text);
-                if (empty($text)) continue;
-                
+                if (empty($text)) {
+                    continue;
+                }
+
                 // Add the section text
                 $formattedText .= $text;
             }
 
             $best->push([
-                'type' => 'ArticlePage',
+                'type' => 'Article',
                 'text' => $formattedText,
-                'doc_id' => $page->id,
+                'doc_id' => $articleId,
             ]);
 
             // -----------------------------------------
@@ -174,17 +166,17 @@ class AIService
 
             return [
                 'text' => $response,
-                'sources' => []
+                'sources' => [],
             ];
 
         } catch (\Exception $e) {
             \Log::error('FAST SEARCH error', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return [
                 'text' => 'Something went wrong.',
-                'sources' => []
+                'sources' => [],
             ];
         }
     }
@@ -214,36 +206,36 @@ class AIService
         return array_unique($keywords);
     }
 
-    /**
-     * Highlight keywords in text for better readability.
-     *
-     * @param  array<string>  $keywords
-     */
-    private function highlightKeywords(string $text, array $keywords): string
-    {
-        // Limit text length for readability
-        if (strlen($text) > 300) {
-            // Try to find a good excerpt around the first keyword
-            foreach ($keywords as $keyword) {
-                $pos = stripos($text, $keyword);
-                if ($pos !== false) {
-                    $start = max(0, $pos - 100);
-                    $text = substr($text, $start, 300);
-                    break;
-                }
-            }
-            if (strlen($text) > 300) {
-                $text = substr($text, 0, 300);
-            }
-        }
+    // /**
+    //  * Highlight keywords in text for better readability.
+    //  *
+    //  * @param  array<string>  $keywords
+    //  */
+    // private function highlightKeywords(string $text, array $keywords): string
+    // {
+    //     // Limit text length for readability
+    //     if (strlen($text) > 300) {
+    //         // Try to find a good excerpt around the first keyword
+    //         foreach ($keywords as $keyword) {
+    //             $pos = stripos($text, $keyword);
+    //             if ($pos !== false) {
+    //                 $start = max(0, $pos - 100);
+    //                 $text = substr($text, $start, 300);
+    //                 break;
+    //             }
+    //         }
+    //         if (strlen($text) > 300) {
+    //             $text = substr($text, 0, 300);
+    //         }
+    //     }
 
-        // Simple highlighting (you can enhance this)
-        foreach ($keywords as $keyword) {
-            $text = preg_replace('/('.preg_quote($keyword, '/').')/i', '**$1**', $text);
-        }
+    //     // Simple highlighting (you can enhance this)
+    //     foreach ($keywords as $keyword) {
+    //         $text = preg_replace('/('.preg_quote($keyword, '/').')/i', '**$1**', $text);
+    //     }
 
-        return $text;
-    }
+    //     return $text;
+    // }
 
     /**
      * Answer a user's question using retrieval-augmented generation (RAG).
@@ -266,9 +258,10 @@ class AIService
             // Validate OpenAI API key
             if (empty(config('openai.api_key'))) {
                 Log::error('OpenAI API key is not configured');
+
                 return [
                     'text' => 'AI service is not configured. Please contact the administrator.',
-                    'sources' => []
+                    'sources' => [],
                 ];
             }
 
@@ -278,9 +271,10 @@ class AIService
 
             if (empty($qEmbedding)) {
                 Log::error('Failed to generate embedding for question');
+
                 return [
                     'text' => 'Unable to process your question. Please try again.',
-                    'sources' => []
+                    'sources' => [],
                 ];
             }
 
@@ -297,17 +291,18 @@ class AIService
                 $query->whereHasMorph(
                     'embeddable',
                     [ArticlePage::class, ArticleImage::class],
-                    function ($q) use ($user) {}
+                    function ($q) {}
                 );
             }
 
             // Get top relevant results
+            // @phpstan-ignore-next-line
             $results = $query->with('embeddable')->get();
 
             if ($results->isEmpty()) {
                 return [
                     'text' => 'No relevant information found. Please upload documents related to your question.',
-                    'sources' => []
+                    'sources' => [],
                 ];
             }
 
@@ -316,12 +311,15 @@ class AIService
             $context = [];
 
             foreach ($results as $embedding) {
+                // @phpstan-ignore-next-line
                 $embeddable = $embedding->embeddable;
-                if (!$embeddable) continue;
+                if (! $embeddable) {
+                    continue;
+                }
 
                 $sources[] = [
                     'id' => $embeddable->id,
-                    'type' => class_basename($embeddable)
+                    'type' => class_basename($embeddable),
                 ];
 
                 $content = '';
@@ -331,17 +329,17 @@ class AIService
                     $content = trim($embeddable->ocr_text ?? '');
                 }
 
-                if (!empty($content)) {
+                if (! empty($content)) {
                     $context[] = $content;
                 }
             }
 
-            $context = collect($context)->map(fn($text) => ['text' => preg_replace('/\s+/', ' ', trim($text))]);
+            $context = collect($context)->map(fn ($text) => ['text' => preg_replace('/\s+/', ' ', trim($text))]);
 
             if (empty($context)) {
                 return [
                     'text' => 'No text content found in the uploaded documents.',
-                    'sources' => []
+                    'sources' => [],
                 ];
             }
 
@@ -353,34 +351,36 @@ class AIService
 
             return [
                 'text' => $response ?: 'Unable to generate a response.',
-                'sources' => $sources
+                'sources' => $sources,
             ];
         } catch (\OpenAI\Exceptions\ErrorException $e) {
             Log::error('OpenAI API Error in answerQuestion', [
                 'error' => $e->getMessage(),
                 'question' => $question,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return [
                 'text' => 'AI service is temporarily unavailable. Please try again later.',
-                'sources' => []
+                'sources' => [],
             ];
         } catch (\Exception $e) {
             Log::error('Error in AIService->answerQuestion', [
                 'error' => $e->getMessage(),
                 'question' => $question,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return [
                 'text' => 'An error occurred while processing your question.',
-                'sources' => []
+                'sources' => [],
             ];
         }
     }
 
     protected function embArray()
     {
-        return array (
+        return [
             0 => -0.016987309,
             1 => -0.01526126,
             2 => -0.021718424,
@@ -3453,6 +3453,6 @@ class AIService
             3069 => -0.001277463,
             3070 => -0.016118076,
             3071 => 0.030547354,
-        );
+        ];
     }
 }

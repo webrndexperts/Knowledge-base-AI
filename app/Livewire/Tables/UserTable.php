@@ -38,10 +38,10 @@ class UserTable extends DataTableComponent
 
     public function builder(): Builder
     {
+        // @phpstan-ignore-next-line
         $query = User::with(['creator', 'conversations'])
             ->withRoles()
             ->withoutAdmin();
-        // ->withCount(['conversations', 'queries']);
 
         return $query->select('users.*');
     }

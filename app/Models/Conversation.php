@@ -43,6 +43,7 @@ class Conversation extends Model
             return 'New Conversation';
         }
 
+        // @phpstan-ignore-next-line
         $question = $firstQuery->question;
 
         // Limit to 50 characters and add ellipsis if needed

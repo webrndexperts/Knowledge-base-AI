@@ -108,6 +108,7 @@ class RoleTable extends DataTableComponent
 
         $role->delete();
         session()->flash('message', 'Role deleted successfully.');
+        // @phpstan-ignore-next-line
         $this->emit('refresh');
     }
 

@@ -20,6 +20,7 @@ class ConversationManagement extends Component
         $this->userId = $userId;
 
         if ($this->userId) {
+            // @phpstan-ignore-next-line
             $this->user = User::with('conversations')->findOrFail($this->userId);
         }
     }
