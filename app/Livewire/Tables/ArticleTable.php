@@ -2,7 +2,6 @@
 
 namespace App\Livewire\Tables;
 
-use Livewire\Component;
 use App\Models\Article;
 use Illuminate\Database\Eloquent\Builder;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
@@ -13,7 +12,7 @@ class ArticleTable extends DataTableComponent
     protected $model = Article::class;
 
     protected $listeners = [
-        'delete-article' => 'delete'
+        'delete-article' => 'delete',
     ];
 
     public function configure(): void
@@ -57,11 +56,11 @@ class ArticleTable extends DataTableComponent
                 ->sortable(fn (Builder $query, string $direction) => $query->orderBy('id', $direction))
                 ->html(),
 
-            Column::make("Title", "title")->searchable()->sortable(),
+            Column::make('Title', 'title')->searchable()->sortable(),
 
-            Column::make("Created", "created_at")
+            Column::make('Created', 'created_at')
                 ->sortable()
-                ->format(fn($value) => $value->diffForHumans()),
+                ->format(fn ($value) => $value->diffForHumans()),
 
             Column::make('Actions')
                 ->label(fn ($row) => view('actions.articles.index', ['row' => $row])->render())
@@ -74,8 +73,8 @@ class ArticleTable extends DataTableComponent
         try {
             $article = Article::findOrFail($id);
             $article->delete();
-            $this->dispatch('notify', message: "Article has been deleted");
-        } catch(\Exception $e) {
+            $this->dispatch('notify', message: 'Article has been deleted');
+        } catch (\Exception $e) {
             $this->dispatch('notify', message: $e->getMessage());
         }
 

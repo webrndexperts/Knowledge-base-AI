@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Models\Article;
 use App\Models\User;
 use App\Services\FileProcessingService;
+use App\Jobs\ProcessPdfUploadJob;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -13,6 +14,8 @@ class PdfUploader extends Component
     use WithFileUploads;
 
     public $file;
+
+    public $fileSelected = false;
 
     protected $rules = [
         'file' => 'required|mimes:pdf',
@@ -23,6 +26,11 @@ class PdfUploader extends Component
         if (! auth()->user()->can('uploadPdf', User::class)) {
             abort(403, __('messages.basic.permission-403'));
         }
+    }
+
+    public function updatedFile()
+    {
+        $this->fileSelected = ! empty($this->file);
     }
 
     /**
@@ -38,24 +46,36 @@ class PdfUploader extends Component
     {
         $this->validate();
 
-        $path = $this->file->store('documents', 'public');
-
-        $article = Article::create([
-            'user_id' => auth()->id(),
-            'title' => $this->file->getClientOriginalName(),
-            'file_path' => $path,
-            'file_type' => $this->file->extension(),
-        ]);
-
         try {
-            $checkService = new FileProcessingService;
-            $checkService->check($this->file, $article);
+            $path = $this->file->store('documents', 'public');
 
-            $this->dispatch('notify', message: __('messages.notify.success.pdf-upload'));
-            // $this->file = null;
-        } catch (\Exception $e) {
-            $this->dispatch('notify', message: $e->getMessage(), type: 'error');
-        }
+            $article = Article::create([
+                'user_id' => auth()->id(),
+                'title' => $this->file->getClientOriginalName(),
+                'file_path' => $path,
+                'file_type' => $this->file->extension(),
+                'meta' => [
+                    'size_kb' => $this->file->getSize() / 1024,
+                ],
+            ]);
+
+            try {
+                // ProcessPdfUploadJob::dispatch($article, $this->file->extension());
+
+                $checkService = new FileProcessingService;
+                $checkService->check($article, $this->file->extension());
+
+                $this->dispatch('notify', message: __('messages.notify.process.pdf-upload'), type: 'warning');
+                $this->file = null;
+                $this->fileSelected = false;
+            } catch (\Exception $e) {
+                $this->dispatch('notify', message: $e->getMessage(), type: 'error');
+                \Log::error('Error dispatching PDF upload job: ' . $e->getMessage());
+            }
+        } catch (\Throwable $th) {
+            $this->dispatch('notify', message: __('messages.notify.upload.failed'), type: 'error');
+            \Log::error('Error uploading PDF: ' . $th->getMessage());
+        } 
     }
 
     public function render()

@@ -29,7 +29,7 @@ class Article extends Model
 
     public function scopeWithRoles($query)
     {
-        if(!auth()->user()->isAdmin()) {
+        if (! auth()->user()->isAdmin()) {
             $query->where('user_id', auth()->id());
         }
 

@@ -2,14 +2,14 @@
 
 namespace App\Livewire\Admin\Users;
 
-use Livewire\Component;
 use App\Models\User;
+use Livewire\Component;
 
 class Index extends Component
 {
     public function mount(): void
     {
-        if(!auth()->user()->can('viewAny', User::class)) {
+        if (! auth()->user()->can('viewAny', User::class)) {
             abort(403, __('messages.basic.permission-403'));
         }
     }

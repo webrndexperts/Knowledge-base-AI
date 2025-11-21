@@ -9,8 +9,11 @@ use Livewire\Component;
 class ConversationSidebar extends Component
 {
     public $conversations;
+
     public $currentConversationId;
+
     public $currentEncryptedId;
+
     public $isOpen = false;
 
     protected $listeners = ['conversationCreated' => 'refreshConversations'];
@@ -25,7 +28,7 @@ class ConversationSidebar extends Component
                 $this->currentEncryptedId = $currentConversationId;
             }
         }
-        
+
         $this->loadConversations();
     }
 
@@ -50,21 +53,21 @@ class ConversationSidebar extends Component
     public function selectConversation($conversationId)
     {
         $conversation = Conversation::find($conversationId);
-        if (!$conversation) {
+        if (! $conversation) {
             return;
         }
-        
+
         $this->currentConversationId = $conversationId;
         $this->currentEncryptedId = $conversation->encrypted_id;
         $this->dispatch('conversationSelected', $conversation->encrypted_id);
-        
+
         // Update URL without page refresh
-        $this->js('window.history.pushState({}, "", "/conversation/' . $conversation->encrypted_id . '")');
+        $this->js('window.history.pushState({}, "", "/conversation/'.$conversation->encrypted_id.'")');
     }
 
     public function createNewConversation()
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return redirect()->route('login');
         }
 
@@ -78,9 +81,9 @@ class ConversationSidebar extends Component
         $this->currentEncryptedId = $conversation->encrypted_id;
         $this->loadConversations();
         $this->dispatch('conversationSelected', $conversation->encrypted_id);
-        
+
         // Update URL without page refresh
-        $this->js('window.history.pushState({}, "", "/conversation/' . $conversation->encrypted_id . '")');
+        $this->js('window.history.pushState({}, "", "/conversation/'.$conversation->encrypted_id.'")');
     }
 
     public function deleteConversation($conversationId)
@@ -92,7 +95,7 @@ class ConversationSidebar extends Component
         if ($conversation) {
             $conversation->delete();
             $this->loadConversations();
-            
+
             // If we deleted the current conversation, switch to home
             if ($this->currentConversationId == $conversationId) {
                 $this->currentConversationId = null;
@@ -104,7 +107,7 @@ class ConversationSidebar extends Component
 
     public function toggleSidebar()
     {
-        $this->isOpen = !$this->isOpen;
+        $this->isOpen = ! $this->isOpen;
     }
 
     public function render()

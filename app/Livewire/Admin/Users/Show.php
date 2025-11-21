@@ -2,8 +2,8 @@
 
 namespace App\Livewire\Admin\Users;
 
-use Livewire\Component;
 use App\Models\User;
+use Livewire\Component;
 
 class Show extends Component
 {
@@ -11,7 +11,7 @@ class Show extends Component
 
     public function mount(User $user): void
     {
-        if(!auth()->user()->can('view', $user)) {
+        if (! auth()->user()->can('view', $user)) {
             abort(403, __('messages.basic.permission-403'));
         }
 
@@ -20,21 +20,23 @@ class Show extends Component
 
     public function deleteUser()
     {
-        if(!auth()->user()->can('delete', $this->user)) {
+        if (! auth()->user()->can('delete', $this->user)) {
             abort(403, __('messages.basic.permission-403'));
         }
 
         if ($this->user->id === auth()->id()) {
             session()->flash('error', 'You cannot delete your own account.');
+
             return;
         }
 
         try {
             $this->user->delete();
             session()->flash('message', 'User deleted successfully.');
+
             return redirect()->route('users.index');
         } catch (\Exception $e) {
-            session()->flash('error', 'Failed to delete user: ' . $e->getMessage());
+            session()->flash('error', 'Failed to delete user: '.$e->getMessage());
         }
     }
 

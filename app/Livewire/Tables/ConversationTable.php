@@ -2,9 +2,7 @@
 
 namespace App\Livewire\Tables;
 
-use Livewire\Component;
 use App\Models\Conversation;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Rappasoft\LaravelLivewireTables\DataTableComponent;
 use Rappasoft\LaravelLivewireTables\Views\Column;
@@ -12,10 +10,11 @@ use Rappasoft\LaravelLivewireTables\Views\Column;
 class ConversationTable extends DataTableComponent
 {
     protected $model = Conversation::class;
+
     public $userId = null;
 
     protected $listeners = [
-        'delete-conversation' => 'delete'
+        'delete-conversation' => 'delete',
     ];
 
     public function configure(): void
@@ -44,11 +43,11 @@ class ConversationTable extends DataTableComponent
         $query = Conversation::with(['user', 'queries'])
             ->withCount('queries')
             ->select('conversations.*');
-            
+
         if ($this->userId) {
             $query->where('user_id', $this->userId);
         }
-        
+
         return $query;
     }
 
@@ -67,77 +66,78 @@ class ConversationTable extends DataTableComponent
                 ->sortable(fn (Builder $query, string $direction) => $query->orderBy('id', $direction))
                 ->html(),
 
-            Column::make("User Name")
+            Column::make('User Name')
                 ->label(function ($row) {
                     $user = $row->user;
+
                     return '<div class="flex items-center space-x-3">
                         <div class="flex-shrink-0 h-8 w-8">
                             <div class="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center">
-                                <span class="text-xs font-medium text-gray-700">' . 
-                                    substr($user->name, 0, 2) . 
+                                <span class="text-xs font-medium text-gray-700">'.
+                                    substr($user->name, 0, 2).
                                 '</span>
                             </div>
                         </div>
                         <div>
-                            <div class="text-sm font-medium text-gray-900">' . $user->name . '</div>
-                            <div class="text-xs text-gray-500">' . $user->email . '</div>
+                            <div class="text-sm font-medium text-gray-900">'.$user->name.'</div>
+                            <div class="text-xs text-gray-500">'.$user->email.'</div>
                         </div>
                     </div>';
                 })
                 ->searchable(function (Builder $query, $searchTerm) {
                     return $query->whereHas('user', function ($q) use ($searchTerm) {
-                        $q->where('name', 'like', '%' . $searchTerm . '%')
-                          ->orWhere('email', 'like', '%' . $searchTerm . '%');
+                        $q->where('name', 'like', '%'.$searchTerm.'%')
+                            ->orWhere('email', 'like', '%'.$searchTerm.'%');
                     });
                 })
                 ->sortable(function (Builder $query, string $direction) {
                     return $query->join('users', 'conversations.user_id', '=', 'users.id')
-                                 ->orderBy('users.name', $direction);
+                        ->orderBy('users.name', $direction);
                 })
                 ->html(),
 
-            Column::make("Conversation Title", "title")
+            Column::make('Conversation Title', 'title')
                 ->searchable()
                 ->sortable()
                 ->format(function ($value, $row) {
                     return '<div class="flex flex-col">
-                        <div class="text-sm font-medium text-gray-900">' . 
-                            \Illuminate\Support\Str::limit($value, 40) . 
+                        <div class="text-sm font-medium text-gray-900">'.
+                            \Illuminate\Support\Str::limit($value, 40).
                         '</div>
-                        <div class="text-xs text-gray-500">ID: ' . $row->id . '</div>
+                        <div class="text-xs text-gray-500">ID: '.$row->id.'</div>
                     </div>';
                 })
                 ->html(),
 
-            Column::make("Total Queries")
+            Column::make('Total Queries')
                 ->label(function ($row) {
-                    return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">' . 
-                        $row->queries_count . ' queries</span>';
+                    return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">'.
+                        $row->queries_count.' queries</span>';
                 })
                 ->sortable(function (Builder $query, string $direction) {
                     return $query->orderBy('queries_count', $direction);
                 })
                 ->html(),
 
-            Column::make("User Status")
+            Column::make('User Status')
                 ->label(function ($row) {
                     $user = $row->user;
                     $isActive = $user->email_verified_at !== null;
                     $statusClass = $isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
                     $statusText = $isActive ? 'Active' : 'Inactive';
-                    
-                    return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ' . 
-                        $statusClass . '">' . $statusText . '</span>';
+
+                    return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium '.
+                        $statusClass.'">'.$statusText.'</span>';
                 })
                 ->sortable(function (Builder $query, string $direction) {
                     return $query->join('users', 'conversations.user_id', '=', 'users.id')
-                                 ->orderBy('users.email_verified_at', $direction);
+                        ->orderBy('users.email_verified_at', $direction);
                 })
                 ->html(),
 
-            Column::make("Last Activity", "updated_at")
+            Column::make('Last Activity', 'updated_at')
                 ->sortable()
-                ->format(fn($value) => $value->diffForHumans()),
+                ->format(fn ($value) => $value->diffForHumans()),
 
             Column::make('Actions')
                 ->label(fn ($row) => view('actions.conversations.index', ['row' => $row])->render())
@@ -150,8 +150,8 @@ class ConversationTable extends DataTableComponent
         try {
             $conversation = Conversation::findOrFail($id);
             $conversation->delete();
-            $this->dispatch('notify', message: "Conversation has been deleted");
-        } catch(\Exception $e) {
+            $this->dispatch('notify', message: 'Conversation has been deleted');
+        } catch (\Exception $e) {
             $this->dispatch('notify', message: $e->getMessage());
         }
     }

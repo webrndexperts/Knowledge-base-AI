@@ -43,7 +43,13 @@ class Login extends Component
         RateLimiter::clear($this->throttleKey());
         Session::regenerate();
 
-        $this->redirectIntended(default: route('dashboard', absolute: false), navigate: true);
+        // Check if user has dashboard access
+        $user = Auth::user();
+        $defaultRoute = $user->can('dashboard', $user)
+            ? route('dashboard', absolute: false)
+            : route('home', absolute: false);
+
+        $this->redirectIntended(default: $defaultRoute, navigate: true);
     }
 
     /**

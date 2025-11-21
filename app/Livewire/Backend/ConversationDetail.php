@@ -8,7 +8,9 @@ use Livewire\Component;
 class ConversationDetail extends Component
 {
     public $conversation;
+
     public $encryptedId;
+
     public $userId;
 
     public function mount($encryptedId)
@@ -20,19 +22,19 @@ class ConversationDetail extends Component
     public function loadConversation()
     {
         $conversationId = Conversation::decryptId($this->encryptedId);
-        
-        if (!$conversationId) {
+
+        if (! $conversationId) {
             abort(404, 'Conversation not found');
         }
 
         $this->conversation = Conversation::with([
             'user',
-            'queries' => function($query) {
+            'queries' => function ($query) {
                 $query->orderBy('created_at');
-            }
+            },
         ])->find($conversationId);
 
-        if (!$this->conversation) {
+        if (! $this->conversation) {
             abort(404, 'Conversation not found');
         }
 
@@ -44,6 +46,7 @@ class ConversationDetail extends Component
         if ($this->conversation) {
             $this->conversation->delete();
             session()->flash('message', 'Conversation deleted successfully.');
+
             return redirect()->route('conversations.index');
         }
     }

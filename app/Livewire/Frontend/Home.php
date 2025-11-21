@@ -2,20 +2,27 @@
 
 namespace App\Livewire\Frontend;
 
-use App\Models\Query;
 use App\Models\Conversation;
+use App\Models\Query;
 use App\Services\AIService;
-use Livewire\Component;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Livewire\Component;
 
 class Home extends Component
 {
     public $question = '';
+
     public $messages = [];
+
     public $searchMode = 'fast'; // 'fast', 'ai', or 'hybrid'
+
     public $currentConversation = null;
+
     public $conversationId = null;
+
     public $encryptedId = null;
+
     public $isLoading = false;
 
     protected $rules = [
@@ -27,15 +34,15 @@ class Home extends Component
     public function mount($encryptedId = null)
     {
         $this->encryptedId = $encryptedId;
-        
+
         if ($encryptedId && Auth::check()) {
             $this->conversationId = Conversation::decryptId($encryptedId);
-            if (!$this->conversationId) {
+            if (! $this->conversationId) {
                 // Invalid encrypted ID, redirect to home
                 return redirect()->route('home');
             }
         }
-        
+
         $this->loadConversation();
     }
 
@@ -44,7 +51,7 @@ class Home extends Component
         if ($this->conversationId && Auth::check()) {
             $this->currentConversation = Conversation::where('user_id', Auth::id())
                 ->where('id', $this->conversationId)
-                ->with(['queries' => function($query) {
+                ->with(['queries' => function ($query) {
                     $query->orderBy('created_at');
                 }])
                 ->first();
@@ -61,24 +68,24 @@ class Home extends Component
     private function loadMessagesFromConversation()
     {
         $this->messages = [];
-        
+
         foreach ($this->currentConversation->queries as $query) {
             $this->messages[] = ['role' => 'user', 'content' => $query->question];
             $this->messages[] = [
-                'role' => 'assistant', 
+                'role' => 'assistant',
                 'content' => $query->answer,
-                'sources' => $query->sources ?? []
+                'sources' => $query->sources ?? [],
             ];
         }
     }
 
     private function ensureConversation()
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return null;
         }
 
-        if (!$this->currentConversation) {
+        if (! $this->currentConversation) {
             $this->currentConversation = Conversation::create([
                 'user_id' => Auth::id(),
                 'title' => 'New Conversation',
@@ -93,7 +100,7 @@ class Home extends Component
     public function switchConversation($encryptedId)
     {
         $this->isLoading = true;
-        
+
         if ($encryptedId === null) {
             // Going back to home - clear current conversation
             $this->conversationId = null;
@@ -103,73 +110,128 @@ class Home extends Component
         } else {
             $this->encryptedId = $encryptedId;
             $this->conversationId = Conversation::decryptId($encryptedId);
-            
-            if (!$this->conversationId) {
+
+            if (! $this->conversationId) {
                 // Invalid encrypted ID
                 $this->isLoading = false;
+
                 return;
             }
-            
+
             $this->loadConversation();
         }
-        
+
         $this->isLoading = false;
     }
 
+    /**
+     * Handle user questions and generate AI responses
+     *
+     * @param  AIService  $ai  The AI service instance
+     * @return void
+     */
     public function ask(AIService $ai)
     {
-        $this->validate();
+        try {
+            $this->validate();
 
-        // Store question before resetting
-        $userQuestion = $this->question;
-        $this->messages[] = ['role' => 'user', 'content' => $userQuestion];
+            // Rate limiting
+            $rateLimitKey = 'ask-question:'.(auth()->id() ?? request()->ip());
+            if (RateLimiter::tooManyAttempts($rateLimitKey, 10)) {
+                $seconds = RateLimiter::availableIn($rateLimitKey);
+                throw new \Exception("Too many attempts. Please try again in {$seconds} seconds.");
+            }
+            RateLimiter::hit($rateLimitKey);
 
-        // Reset input
-        $this->question = '';
-
-        // Choose search method based on mode
-        $response = match($this->searchMode) {
-            'fast' => $ai->fastSearch($userQuestion),
-            'ai' => $ai->answerQuestion($userQuestion),
-            'hybrid' => $this->hybridSearch($ai, $userQuestion),
-            default => $ai->fastSearch($userQuestion)
-        };
-
-        // Only save if we got a valid response
-        if (!empty($response['text'])) {
-            // Ensure we have a conversation
-            $conversation = $this->ensureConversation();
-            
-            if ($conversation) {
-                $query = Query::create([
-                    'user_id' => auth()->id(),
-                    'conversation_id' => $conversation->id,
-                    'question' => $userQuestion,
-                    'answer' => $response['text'],
-                    'sources' => $response['sources'] ?? [],
-                ]);
-
-                // Update conversation title if it's the first query
-                $conversation->ensureTitle();
-                
-                // Update conversation timestamp
-                $conversation->touch();
-                
-                // Dispatch event to refresh sidebar
-                $this->dispatch('conversationCreated', $conversation->id);
+            // Store question before resetting
+            $userQuestion = trim($this->question);
+            if (empty($userQuestion)) {
+                throw new \Exception('Question cannot be empty.');
             }
 
+            // Add user message to chat
+            $this->messages[] = [
+                'role' => 'user',
+                'content' => $userQuestion,
+                'timestamp' => now()->toDateTimeString(),
+            ];
+
+            // Reset input
+            $this->question = '';
+            $this->isLoading = true;
+
+            // Process the question based on selected mode
+            try {
+                $response = match ($this->searchMode) {
+                    'fast' => $ai->fastSearch($userQuestion),
+                    'ai' => $ai->answerQuestion($userQuestion),
+                    'hybrid' => $this->hybridSearch($ai, $userQuestion),
+                    default => $ai->fastSearch($userQuestion)
+                };
+
+                if (empty($response['text'])) {
+                    throw new \Exception('No response content received from the AI service.');
+                }
+
+                // Ensure we have a conversation for authenticated users
+                $conversation = null;
+                if (auth()->check()) {
+                    $conversation = $this->ensureConversation();
+
+                    if ($conversation) {
+                        // Save the query and response
+                        $query = Query::create([
+                            'user_id' => auth()->id(),
+                            'conversation_id' => $conversation->id,
+                            'question' => $userQuestion,
+                            'answer' => $response['text'],
+                            'sources' => $response['sources'] ?? [],
+                        ]);
+
+                        // Update conversation title if it's the first query
+                        $conversation->ensureTitle();
+
+                        // Update conversation timestamp
+                        $conversation->touch();
+
+                        // Dispatch event to refresh sidebar
+                        $this->dispatch('conversationCreated', $conversation->id);
+                    }
+                }
+
+                // Add assistant's response to messages
+                $this->messages[] = [
+                    'role' => 'assistant',
+                    'content' => $response['text'],
+                    'sources' => $response['sources'] ?? [],
+                    'timestamp' => now()->toDateTimeString(),
+                ];
+
+            } catch (\Exception $e) {
+                \Log::error('AI Service Error: '.$e->getMessage(), [
+                    'question' => $userQuestion,
+                    'mode' => $this->searchMode,
+                    'user_id' => auth()->id(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+
+                throw new \Exception('Sorry, there was an error processing your request. Please try again later.');
+            }
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->addError('question', $e->getMessage());
+        } catch (\Exception $e) {
+            $this->addError('question', $e->getMessage());
+
+            // Add error message to chat
             $this->messages[] = [
                 'role' => 'assistant',
-                'content' => $response['text'],
-                'sources' => $response['sources'] ?? [],
+                'content' => 'Sorry, I encountered an error: '.$e->getMessage(),
+                'is_error' => true,
+                'timestamp' => now()->toDateTimeString(),
             ];
-        } else {
-            $this->messages[] = [
-                'role' => 'assistant',
-                'content' => 'Sorry, I could not find an answer to your question. Please try rephrasing or upload relevant documents.',
-                'sources' => [],
-            ];
+        } finally {
+            $this->isLoading = false;
         }
     }
 
@@ -180,12 +242,12 @@ class Home extends Component
     {
         // First try fast search
         $fastResponse = $ai->fastSearch($question);
-        
+
         // If fast search found results, return them
-        if (!empty($fastResponse['sources']) && count($fastResponse['sources']) > 0) {
+        if (! empty($fastResponse['sources']) && count($fastResponse['sources']) > 0) {
             return $fastResponse;
         }
-        
+
         // If no fast results, try AI search
         return $ai->answerQuestion($question);
     }
@@ -195,24 +257,24 @@ class Home extends Component
         $this->searchMode = $mode;
         $this->messages[] = [
             'role' => 'system',
-            'content' => match($mode) {
+            'content' => match ($mode) {
                 'fast' => '🚀 **Fast Search Mode** - Instant keyword-based search activated',
                 'ai' => '🤖 **AI Mode** - Advanced AI analysis activated (slower but more intelligent)',
                 'hybrid' => '⚡ **Hybrid Mode** - Fast search with AI fallback activated',
                 default => 'Search mode updated'
             },
-            'sources' => []
+            'sources' => [],
         ];
     }
 
     public function newConversation()
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return redirect()->route('login');
         }
 
         $this->isLoading = true;
-        
+
         $conversation = Conversation::create([
             'user_id' => Auth::id(),
             'title' => 'New Conversation',
@@ -223,13 +285,13 @@ class Home extends Component
         $this->encryptedId = $conversation->encrypted_id;
         $this->currentConversation = $conversation;
         $this->messages = [];
-        
+
         // Update URL without page refresh
-        $this->js('window.history.pushState({}, "", "/conversation/' . $conversation->encrypted_id . '")');
-        
+        $this->js('window.history.pushState({}, "", "/conversation/'.$conversation->encrypted_id.'")');
+
         // Refresh sidebar
         $this->dispatch('conversationCreated', $conversation->encrypted_id);
-        
+
         $this->isLoading = false;
     }
 
@@ -237,7 +299,7 @@ class Home extends Component
     {
         return view('livewire.frontend.home')
             ->layout('components.layouts.app.frontend', [
-                'title' => $this->currentConversation ? $this->currentConversation->title : __('messages.title.home')
+                'title' => $this->currentConversation ? $this->currentConversation->title : __('messages.title.home'),
             ]);
     }
 }

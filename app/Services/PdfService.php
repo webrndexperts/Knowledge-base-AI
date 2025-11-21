@@ -83,22 +83,28 @@ class PdfService
      */
     public function extractOCRFromPage(\Imagick $page): string
     {
-        // Save page temporarily
-        $tmpFile = tempnam(sys_get_temp_dir(), 'ocr_page_').'.png';
-        $page->setImageFormat('png');
-        $page->writeImage($tmpFile);
-
         try {
-            $text = (new TesseractOCR($tmpFile))
-                ->run();
+            // Save page temporarily
+            $tmpFile = tempnam(sys_get_temp_dir(), 'ocr_page_').'.png';
+            $page->setImageFormat('png');
+            $page->writeImage($tmpFile);
+
+            try {
+                $text = (new TesseractOCR($tmpFile))
+                    ->run();
+            } catch (\Exception $e) {
+                Log::info('Error in PdfService->extractOCRFromPage (Tesseract)', ['error' => $e->getMessage()]);
+                $text = '';
+            }
+
+            @unlink($tmpFile);
+
+            return trim($text);
         } catch (\Exception $e) {
-            Log::info('Error in PdfService->extractOCRFromPage', ['error' => $e->getMessage()]);
-            $text = '';
+            Log::error('Error in PdfService->extractOCRFromPage (Image write)', ['error' => $e->getMessage()]);
+
+            return '';
         }
-
-        @unlink($tmpFile);
-
-        return trim($text);
     }
 
     /**

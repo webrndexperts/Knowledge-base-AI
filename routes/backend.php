@@ -1,9 +1,11 @@
 <?php
 
+use App\Livewire\Admin\RoleCrud;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['role:admin'])->group(function () {
-    Route::name('roles.')->group(function () {
-        // require __DIR__.'/roles.php';
+    // Roles Management
+    Route::prefix('roles')->name('roles.')->group(function () {
+        Route::get('/', RoleCrud::class)->name('index');
     });
 });

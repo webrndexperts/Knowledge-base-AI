@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Str;
 
 class Conversation extends Model
 {
@@ -40,13 +39,14 @@ class Conversation extends Model
     public function generateTitle(): string
     {
         $firstQuery = $this->queries()->first();
-        if (!$firstQuery) {
+        if (! $firstQuery) {
             return 'New Conversation';
         }
 
         $question = $firstQuery->question;
+
         // Limit to 50 characters and add ellipsis if needed
-        return strlen($question) > 50 ? substr($question, 0, 47) . '...' : $question;
+        return strlen($question) > 50 ? substr($question, 0, 47).'...' : $question;
     }
 
     /**
@@ -77,19 +77,19 @@ class Conversation extends Model
         // Encode the ID with a simple cipher
         $key = crc32(config('app.key')) & 0xFFFFFF; // 24-bit key
         $encoded = $id ^ $key;
-        
+
         // Convert to hex and pad to 8 characters
         $hex = str_pad(dechex($encoded), 8, '0', STR_PAD_LEFT);
-        
+
         // Add checksum (4 chars)
-        $checksum = substr(hash('crc32', $id . config('app.key')), 0, 4);
-        
+        $checksum = substr(hash('crc32', $id.config('app.key')), 0, 4);
+
         // Combine: 8 chars + 4 chars = 12 chars
-        $combined = $hex . $checksum;
-        
+        $combined = $hex.$checksum;
+
         // Format like UUID: xxxx-xxxx_xxxx (14 chars with separators)
-        $formatted = substr($combined, 0, 4) . '-' . substr($combined, 4, 4) . '_' . substr($combined, 8, 4);
-        
+        $formatted = substr($combined, 0, 4).'-'.substr($combined, 4, 4).'_'.substr($combined, 8, 4);
+
         return $formatted;
     }
 
@@ -101,29 +101,29 @@ class Conversation extends Model
         try {
             // Remove separators: xxxx-xxxx_xxxx -> xxxxxxxxxxxx
             $cleaned = str_replace(['-', '_'], '', $encryptedId);
-            
+
             if (strlen($cleaned) !== 12) {
                 return null;
             }
-            
+
             // Split hex and checksum
             $hex = substr($cleaned, 0, 8);
             $checksum = substr($cleaned, 8, 4);
-            
+
             // Convert hex back to decimal
             $encoded = hexdec($hex);
-            
+
             // Decrypt with XOR
             $key = crc32(config('app.key')) & 0xFFFFFF;
             $id = $encoded ^ $key;
-            
+
             // Verify checksum
-            $expectedChecksum = substr(hash('crc32', $id . config('app.key')), 0, 4);
-            
+            $expectedChecksum = substr(hash('crc32', $id.config('app.key')), 0, 4);
+
             if ($checksum !== $expectedChecksum) {
                 return null;
             }
-            
+
             return (int) $id;
         } catch (\Exception $e) {
             return null;
@@ -136,8 +136,8 @@ class Conversation extends Model
     public static function findByEncryptedId(string $encryptedId, int $userId): ?self
     {
         $id = self::decryptId($encryptedId);
-        
-        if (!$id) {
+
+        if (! $id) {
             return null;
         }
 

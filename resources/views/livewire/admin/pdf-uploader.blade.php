@@ -3,9 +3,7 @@
         <h2 class="text-xl font-semibold">Upload Article Pdf</h2>
 
         <div class="flex items-center justify-center gap-2">
-            <flux:link href="{{ route('articles.list') }}" class="flex md:ml-auto px-4 py-2 rounded !text-white !bg-gray-200  hover:!bg-gray-400 cursor-pointer !no-underline">
-                <i class="fa-solid fa-arrow-left"></i> {{ __('messages.basic.back') }}
-            </flux:link>
+            <x-back-btn url="articles.list" />
         </div>
     </div>
 
@@ -19,7 +17,12 @@
                 label="{{ __('messages.basic.upload', ['file_type' => 'PDF']) }}"
             />
 
-            <x-loader-btn target="submit" type='submit' class="bg-blue-500 text-white px-3 py-1 rounded">
+            <x-loader-btn 
+                target="submit" 
+                type='submit' 
+                class="bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="!$fileSelected"
+            >
                 {{ __('messages.basic.submit') }}
             </x-loader-btn>
         </form>

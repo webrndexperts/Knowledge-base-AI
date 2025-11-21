@@ -14,10 +14,12 @@ return new class extends Migration
         Schema::create('queries', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('conversation_id')->nullable()->constrained()->onDelete('cascade');
             $table->text('question');
             $table->text('answer')->nullable();
             $table->json('sources')->nullable();
             $table->timestamps();
+            $table->index(['conversation_id', 'created_at']);
         });
     }
 

@@ -6,14 +6,15 @@ use App\Models\Articles\ArticleImage;
 use App\Models\Articles\ArticlePage;
 use App\Models\Articles\Embedding;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use OpenAI\Laravel\Facades\OpenAI;
 
 class AIService
 {
     protected $maxTokens = 1500;
+
     protected $contextTokens = 0;
+
     protected $context = '';
 
     /**
@@ -57,7 +58,7 @@ class AIService
         try {
             // Extract keywords from the question
             $keywords = $this->extractKeywords($question);
-            
+
             if (empty($keywords)) {
                 return ['text' => 'Please provide more specific search terms.', 'sources' => []];
             }
@@ -67,7 +68,7 @@ class AIService
 
             // Search in ArticlePages
             $pageQuery = ArticlePage::query();
-            
+
             if (Auth::check()) {
                 $pageQuery->whereHas('article', function ($q) {
                     $q->where('user_id', Auth::id());
@@ -77,7 +78,7 @@ class AIService
             foreach ($keywords as $keyword) {
                 $pageQuery->where(function ($q) use ($keyword) {
                     $q->where('native_text', 'ILIKE', "%{$keyword}%")
-                      ->orWhere('ocr_text', 'ILIKE', "%{$keyword}%");
+                        ->orWhere('ocr_text', 'ILIKE', "%{$keyword}%");
                 });
             }
 
@@ -85,15 +86,15 @@ class AIService
 
             foreach ($pages as $page) {
                 $sources[] = ['id' => $page->id, 'type' => 'ArticlePage'];
-                $text = trim(($page->native_text ?? '') . ' ' . ($page->ocr_text ?? ''));
-                if (!empty($text)) {
+                $text = trim(($page->native_text ?? '').' '.($page->ocr_text ?? ''));
+                if (! empty($text)) {
                     $results[] = $this->highlightKeywords($text, $keywords);
                 }
             }
 
             // Search in ArticleImages
             $imageQuery = ArticleImage::query();
-            
+
             if (Auth::check()) {
                 $imageQuery->whereHas('page.article', function ($q) {
                     $q->where('user_id', Auth::id());
@@ -109,7 +110,7 @@ class AIService
             foreach ($images as $image) {
                 $sources[] = ['id' => $image->id, 'type' => 'ArticleImage'];
                 $text = trim($image->ocr_text ?? '');
-                if (!empty($text)) {
+                if (! empty($text)) {
                     $results[] = $this->highlightKeywords($text, $keywords);
                 }
             }
@@ -121,17 +122,17 @@ class AIService
             // Format results
             $responseText = "**Search Results:**\n\n";
             foreach (array_slice($results, 0, 3) as $index => $result) {
-                $responseText .= "**Result " . ($index + 1) . ":**\n";
-                $responseText .= $result . "\n\n";
+                $responseText .= '**Result '.($index + 1).":**\n";
+                $responseText .= $result."\n\n";
             }
 
             if (count($results) > 3) {
-                $responseText .= "*Found " . count($results) . " total matches. Showing top 3 results.*";
+                $responseText .= '*Found '.count($results).' total matches. Showing top 3 results.*';
             }
 
             return [
                 'text' => $responseText,
-                'sources' => array_slice($sources, 0, 8) // Limit sources
+                'sources' => array_slice($sources, 0, 8), // Limit sources
             ];
 
         } catch (\Exception $e) {
@@ -139,6 +140,7 @@ class AIService
                 'error' => $e->getMessage(),
                 'question' => $question,
             ]);
+
             return ['text' => 'Search error occurred. Please try again.', 'sources' => []];
         }
     }
@@ -146,35 +148,32 @@ class AIService
     /**
      * Extract meaningful keywords from a search query.
      *
-     * @param  string  $question
      * @return array<string>
      */
     private function extractKeywords(string $question): array
     {
         // Remove common stop words
         $stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'what', 'where', 'when', 'why', 'how', 'who', 'which'];
-        
+
         // Clean and split the question
         $words = preg_split('/\s+/', strtolower(trim($question)));
         $keywords = [];
-        
+
         foreach ($words as $word) {
             // Remove punctuation and keep only words with 3+ characters
             $word = preg_replace('/[^\w]/', '', $word);
-            if (strlen($word) >= 3 && !in_array($word, $stopWords)) {
+            if (strlen($word) >= 3 && ! in_array($word, $stopWords)) {
                 $keywords[] = $word;
             }
         }
-        
+
         return array_unique($keywords);
     }
 
     /**
      * Highlight keywords in text for better readability.
      *
-     * @param  string  $text
      * @param  array<string>  $keywords
-     * @return string
      */
     private function highlightKeywords(string $text, array $keywords): string
     {
@@ -185,18 +184,18 @@ class AIService
                 $pos = stripos($text, $keyword);
                 if ($pos !== false) {
                     $start = max(0, $pos - 100);
-                    $text = '...' . substr($text, $start, 300) . '...';
+                    $text = '...'.substr($text, $start, 300).'...';
                     break;
                 }
             }
             if (strlen($text) > 300) {
-                $text = substr($text, 0, 300) . '...';
+                $text = substr($text, 0, 300).'...';
             }
         }
 
         // Simple highlighting (you can enhance this)
         foreach ($keywords as $keyword) {
-            $text = preg_replace('/(' . preg_quote($keyword, '/') . ')/i', '**$1**', $text);
+            $text = preg_replace('/('.preg_quote($keyword, '/').')/i', '**$1**', $text);
         }
 
         return $text;
@@ -224,15 +223,17 @@ class AIService
         // Validate OpenAI API key
         if (empty(config('openai.api_key'))) {
             Log::error('OpenAI API key is not configured');
+
             return ['text' => 'AI service is not configured. Please contact the administrator.', 'sources' => []];
         }
 
         try {
             // Step 1: Generate embedding for the question
             $qEmbedding = $this->generateEmbedding($question);
-            
+
             if (empty($qEmbedding)) {
                 Log::error('Failed to generate embedding for question');
+
                 return ['text' => 'Unable to process your question. Please try again.', 'sources' => []];
             }
 
@@ -324,12 +325,14 @@ class AIService
                 'error' => $e->getMessage(),
                 'question' => $question,
             ]);
+
             return ['text' => 'AI service is temporarily unavailable. Please try again later.', 'sources' => []];
         } catch (\Exception $e) {
             Log::error('Error in AIService->answerQuestion', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ['text' => 'An error occurred while processing your question.', 'sources' => []];
         }
 

@@ -2,15 +2,15 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
 use App\Models\User;
+use Livewire\Component;
 
 class Dashboard extends Component
 {
     public function mount()
     {
-        if(!auth()->user()->can('dashboard', User::class)) {
-            abort(403, __('messages.basic.permission-403'));
+        if (! auth()->user()->can('dashboard', User::class)) {
+            return redirect()->route('home');
         }
     }
 

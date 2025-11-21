@@ -12,7 +12,6 @@
                 {{ __('messages.sidebar.dashboard') }}
             </flux:navlist.item>
 
-
             {{-- Articles Route --}}
             <flux:navlist.group expandable heading="{{ __('messages.sidebar.articles') }}" class="grid" :current="request() -> routeIs('articles.*')">
                 <flux:navlist.item icon="plus" :href="route('articles.upload.pdf')" :current="request() -> routeIs('articles.upload.pdf')" wire:navigate>
@@ -24,6 +23,12 @@
                 </flux:navlist.item>
             </flux:navlist.group>
 
+            @if(auth()->user()->isAdmin())
+                {{-- Roles Routes --}}
+                <flux:navlist.item icon="shield-check" :href="route('roles.index')" :current="request()->routeIs('roles.*')" wire:navigate>
+                    {{ __('messages.sidebar.roles') }}
+                </flux:navlist.item>
+            @endif
         </flux:navlist.group>
     </flux:navlist>
 

@@ -2,17 +2,21 @@
 
 namespace App\Livewire\Admin\Users;
 
-use Livewire\Component;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
+use Livewire\Component;
 
 class Create extends Component
 {
     public $name = '';
+
     public $email = '';
+
     public $password = '';
+
     public $password_confirmation = '';
+
     public $email_verified = false;
 
     protected function rules()
@@ -35,7 +39,7 @@ class Create extends Component
 
     public function mount(): void
     {
-        if(!auth()->user()->can('create', User::class)) {
+        if (! auth()->user()->can('create', User::class)) {
             abort(403, __('messages.basic.permission-403'));
         }
     }
@@ -54,9 +58,10 @@ class Create extends Component
             ]);
 
             session()->flash('message', 'User created successfully.');
+
             return redirect()->route('users.index');
         } catch (\Exception $e) {
-            session()->flash('error', 'Failed to create user: ' . $e->getMessage());
+            session()->flash('error', 'Failed to create user: '.$e->getMessage());
         }
     }
 

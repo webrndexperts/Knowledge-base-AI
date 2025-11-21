@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use OpenAI\Laravel\Facades\OpenAI;
-use App\Models\Article;
 
 class AIService
 {
@@ -29,29 +28,6 @@ class AIService
             $magB += $b[$i] ** 2;
         }
         return $dot / (sqrt($magA) * sqrt($magB));
-    }
-
-    protected function getAiAnswer($topResults, $query)
-    {
-        try {
-            $context = $topResults->pluck('text')->implode("\n\n");
-            
-            $resp = OpenAI::chat()->create([
-                'model' => 'gpt-4-turbo',
-                'messages' => [
-                    ['role' => 'system', 'content' => 'Answer concisely based only on the provided context. If the answer is not in the context, say "I don\'t have enough information to answer that question."'],
-                    ['role' => 'user', 'content' => "Context:\n{$context}\n\nQuestion: {$query}"],
-                ],
-                'temperature' => 0.3,
-                'max_tokens' => 1000,
-            ]);
-
-            return $resp['choices'][0]['message']['content'];
-        } catch (\Exception $e) {
-            logger()->error('AI answer error: ' . $e->getMessage());
-
-            return "I encountered an error while generating an answer. Please try again.";
-        }
     }
 
     /**
@@ -99,93 +75,96 @@ class AIService
         }
 
         try {
-            // -----------------------------------------
-            // STEP 1: Extract keywords from question
-            // -----------------------------------------
+            // Extract keywords from the question
             $keywords = $this->extractKeywords($question);
 
             if (empty($keywords)) {
-                return [
-                    'text' => 'Please ask a more detailed question.',
-                    'sources' => []
-                ];
+                return ['text' => 'Please provide more specific search terms.', 'sources' => []];
             }
 
-            // -----------------------------------------
-            // STEP 2: Load all text sections
-            // -----------------------------------------
-            $sections = [];
+            $sources = [];
+            $results = [];
 
-            $pageQuery = ArticlePage::where(function ($q) use ($question) {
-                $q->where('native_text', 'ILIKE', "%{$question}%")
-                    ->orWhere('ocr_text', 'ILIKE', "%{$question}%");
-            });
+            // Search in ArticlePages
+            $pageQuery = ArticlePage::query();
+
+            if (Auth::check()) {
+                // $pageQuery->whereHas('article', function ($q) {
+                //     $q->where('user_id', Auth::id());
+                // });
+            }
 
             foreach ($keywords as $keyword) {
-                $pageQuery->orWhere(function ($q) use ($keyword) {
+                $pageQuery->where(function ($q) use ($keyword) {
                     $q->where('native_text', 'ILIKE', "%{$keyword}%")
                         ->orWhere('ocr_text', 'ILIKE', "%{$keyword}%");
                 });
             }
 
-            $values = $pageQuery->take(1)->get();
-            $articleId = null;
+            $pages = $pageQuery->limit(1)->get();
 
-            foreach ($values as $value) {
-                if($articleId) continue;
-
-                $articleId = $value->article_id;
+            foreach ($pages as $page) {
+                $sources[] = ['id' => $page->id, 'type' => 'ArticlePage'];
+                $text = trim(($page->native_text ?? '').' '.($page->ocr_text ?? ''));
+                if (! empty($text)) {
+                    $results[] = $this->highlightKeywords($text, $keywords);
+                }
             }
 
-            $article = Article::findOrFail($articleId);
+            // Search in ArticleImages
+            $imageQuery = ArticleImage::query();
 
-            if(!$article) {
-                return [
-                    'text' => 'No article content available.',
-                    'sources' => []
-                ];
+            if (Auth::check()) {
+                // $imageQuery->whereHas('page.article', function ($q) {
+                //     $q->where('user_id', Auth::id());
+                // });
             }
 
-            $article->load(['pages', 'pages.images', 'pages.embeddings']);
-            $best = collect();
-            
-            // First pass: collect all sections and their scores
-            $formattedText = '';
-
-            foreach ($article->pages ?? [] as $page) {
-                $text = trim(($page->native_text ?? '') . "\n" . ($page->ocr_text ?? ''));
-                $text = preg_replace('/\s+/', ' ', $text);
-                if (empty($text)) continue;
-                
-                // Add the section text
-                $formattedText .= $text;
+            foreach ($keywords as $keyword) {
+                $imageQuery->where('ocr_text', 'ILIKE', "%{$keyword}%");
             }
 
-            $best->push([
-                'type' => 'ArticlePage',
-                'text' => $formattedText,
-                'doc_id' => $page->id,
-            ]);
+            $images = $imageQuery->limit(3)->get();
 
-            // -----------------------------------------
-            // STEP 5: Ask GPT to answer using context only
-            // -----------------------------------------
-            $response = $this->getAiAnswer($best->values(), $question);
+            foreach ($images as $image) {
+                $sources[] = ['id' => $image->id, 'type' => 'ArticleImage'];
+                $text = trim($image->ocr_text ?? '');
+                if (! empty($text)) {
+                    $results[] = $this->highlightKeywords($text, $keywords);
+                }
+            }
 
-            return [
-                'text' => $response,
-                'sources' => []
+            if (empty($results)) {
+                return ['text' => 'No matching content found. Try different search terms or upload relevant documents.', 'sources' => []];
+            }
+
+            // Format results
+            $responseText = '';
+            foreach (array_slice($results, 0, 3) as $index => $result) {
+                $responseText .= $result."\n\n";
+            }
+
+            if (count($results) > 3) {
+                // $responseText .= "*Found " . count($results) . " total matches. Showing top 3 results.*";
+            }
+
+            $result = [
+                'text' => $responseText,
+                'sources' => array_slice($sources, 0, 8), // Limit sources
             ];
+
+            // Cache the result for 10 minutes
+            Cache::put($cacheKey, $result, 600);
+
+            return $result;
 
         } catch (\Exception $e) {
-            \Log::error('FAST SEARCH error', [
-                'error' => $e->getMessage()
+            Log::error('Error in AIService->fastSearch', [
+                'error' => $e->getMessage(),
+                'question' => $question,
             ]);
 
-            return [
-                'text' => 'Something went wrong.',
-                'sources' => []
-            ];
+            return ['text' => 'Search error occurred. Please try again.', 'sources' => []];
         }
     }
 
@@ -262,121 +241,128 @@ class AIService
      */
     public function answerQuestion(string $question): array
     {
-        try {
-            // Validate OpenAI API key
-            if (empty(config('openai.api_key'))) {
-                Log::error('OpenAI API key is not configured');
-                return [
-                    'text' => 'AI service is not configured. Please contact the administrator.',
-                    'sources' => []
-                ];
-            }
+        $values = ['text' => '', 'sources' => []];
 
-            // Generate embedding for the question
+        // Validate OpenAI API key
+        if (empty(config('openai.api_key'))) {
+            Log::error('OpenAI API key is not configured');
+
+            return ['text' => 'AI service is not configured. Please contact the administrator.', 'sources' => []];
+        }
+
+        try {
+            // Step 1: Generate embedding for the question
             $qEmbedding = $this->generateEmbedding($question);
-            // $qEmbedding = $this->embArray();
 
             if (empty($qEmbedding)) {
                 Log::error('Failed to generate embedding for question');
-                return [
-                    'text' => 'Unable to process your question. Please try again.',
-                    'sources' => []
-                ];
+
+                return ['text' => 'Unable to process your question. Please try again.', 'sources' => []];
             }
 
-            // Build the embedding query
             $qEmbeddingStr = '['.implode(',', $qEmbedding).']';
+
+            // Step 2: Build optimized query with pgvector operator (<->)
             $query = Embedding::selectRaw(
                 'id, embeddable_id, embeddable_type, embedding <-> ? as distance',
                 [$qEmbeddingStr]
-            )->orderBy('embeddable_id', 'asc');
+            )->orderBy('distance', 'asc');
 
-            // Apply access control for authenticated users
             if (Auth::check()) {
                 $user = Auth::user();
+
+                // Optimized filter: Load embeddings with article relationship
                 $query->whereHasMorph(
                     'embeddable',
                     [ArticlePage::class, ArticleImage::class],
-                    function ($q) use ($user) {}
+                    function ($q) use ($user) {
+                        // For ArticlePage, check article.user_id directly
+                        if ($q->getModel() instanceof ArticlePage) {
+                            $q->whereHas('article', function ($qa) use ($user) {
+                                $qa->where('user_id', $user->id);
+                            });
+                        }
+                        // For ArticleImage, check through page->article
+                        if ($q->getModel() instanceof ArticleImage) {
+                            $q->whereHas('page.article', function ($qa) use ($user) {
+                                $qa->where('user_id', $user->id);
+                            });
+                        }
+                    }
                 );
             }
 
-            // Get top relevant results
-            $results = $query->with('embeddable')->get();
+            $results = $query->limit(5)->with('embeddable')->get();
 
+            // Check if we have any results
             if ($results->isEmpty()) {
-                return [
-                    'text' => 'No relevant information found. Please upload documents related to your question.',
-                    'sources' => []
-                ];
+                return ['text' => 'No relevant information found. Please upload documents related to your question.', 'sources' => []];
             }
 
-            // Process results and build context
+            // Step 3: Collect sources + context
             $sources = [];
-            $context = [];
+            $context = '';
 
             foreach ($results as $embedding) {
                 $embeddable = $embedding->embeddable;
-                if (!$embeddable) continue;
 
-                $sources[] = [
-                    'id' => $embeddable->id,
-                    'type' => class_basename($embeddable)
-                ];
+                if ($embeddable) {
+                    $sources[] = [
+                        'id' => $embedding->embeddable_id,
+                        'type' => class_basename($embedding->embeddable_type),
+                    ];
 
-                $content = '';
-                if ($embeddable instanceof ArticlePage) {
-                    $content = trim(($embeddable->native_text ?? '').' '.($embeddable->ocr_text ?? ''));
-                } elseif ($embeddable instanceof ArticleImage) {
-                    $content = trim($embeddable->ocr_text ?? '');
-                }
-
-                if (!empty($content)) {
-                    $context[] = $content;
+                    if ($embeddable instanceof ArticlePage) {
+                        $context .= "\n".trim(($embeddable->native_text ?? '').' '.($embeddable->ocr_text ?? ''));
+                    } elseif ($embeddable instanceof ArticleImage) {
+                        $context .= "\n".trim($embeddable->ocr_text ?? '');
+                    }
                 }
             }
 
-            $context = collect($context)->map(fn($text) => ['text' => preg_replace('/\s+/', ' ', trim($text))]);
-
+            // Trim context to avoid token limits
+            $context = trim($context);
             if (empty($context)) {
-                return [
-                    'text' => 'No text content found in the uploaded documents.',
-                    'sources' => []
-                ];
+                return ['text' => 'No text content found in the uploaded documents.', 'sources' => []];
             }
 
-            // Generate AI response
-            $response = $this->getAiAnswer(
-                $context,
-                $question
-            );
+            // Step 4: Ask GPT with timeout and error handling
+            $completion = OpenAI::chat()->create([
+                'model' => config('openai.model', 'gpt-4o-mini'),
+                'messages' => [
+                    ['role' => 'system', 'content' => 'You are a helpful assistant. Answer questions based only on the provided context. If the context does not contain relevant information, say so.'],
+                    ['role' => 'user', 'content' => "Question: {$question}\n\nContext:\n{$context}"],
+                ],
+                'max_tokens' => 500,
+                'temperature' => 0.7,
+            ]);
 
-            return [
-                'text' => $response ?: 'Unable to generate a response.',
-                'sources' => $sources
+            $answer = $completion['choices'][0]['message']['content'] ?? '';
+
+            $values = [
+                'text' => $answer ?: 'Unable to generate a response.',
+                'sources' => $sources,
             ];
         } catch (\OpenAI\Exceptions\ErrorException $e) {
             Log::error('OpenAI API Error in answerQuestion', [
                 'error' => $e->getMessage(),
                 'question' => $question,
-                'trace' => $e->getTraceAsString()
             ]);
-            return [
-                'text' => 'AI service is temporarily unavailable. Please try again later.',
-                'sources' => []
-            ];
+
+            return ['text' => 'AI service is temporarily unavailable. Please try again later.', 'sources' => []];
         } catch (\Exception $e) {
             Log::error('Error in AIService->answerQuestion', [
                 'error' => $e->getMessage(),
-                'question' => $question,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            return [
-                'text' => 'An error occurred while processing your question.',
-                'sources' => []
-            ];
+
+            return ['text' => 'An error occurred while processing your question.', 'sources' => []];
         }
+
+        return $values;
     }
+
+    
 
     protected function embArray()
     {

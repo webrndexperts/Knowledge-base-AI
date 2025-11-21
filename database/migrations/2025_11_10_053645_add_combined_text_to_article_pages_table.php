@@ -11,11 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('embeddings', function (Blueprint $table) {
-            $table->id();
-            $table->morphs('embeddable');
-            $table->vector('embedding', 3072);
-            $table->timestamps();
+        Schema::table('article_pages', function (Blueprint $table) {
+            //
         });
     }
 
@@ -24,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('embeddings');
+        Schema::table('article_pages', function (Blueprint $table) {
+            //
+        });
     }
 };

@@ -2,10 +2,8 @@
 
 namespace App\Models\Articles;
 
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Article;
-use App\Models\Articles\ArticlePage;
-use App\Models\Articles\Embedding;
+use Illuminate\Database\Eloquent\Model;
 
 class ArticleImage extends Model
 {

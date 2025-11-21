@@ -17,138 +17,166 @@ class FileProcessingService
 
     protected $imagePath;
 
+    protected $ghostscriptAvailable = null;
+
     /**
-     * Process a PDF file:
-     * - Iterates through all pages with Imagick.
-     * - Extracts native text (pdftotext) and OCR text (Tesseract).
-     * - Stores each page in ArticlePage.
-     * - Generates embeddings for the combined text.
-     * - Extracts images embedded within each page.
-     *
-     * @return void
+     * Process a PDF file using Poppler utilities
      */
     private function processPdf(Article $article, PdfService $pdfService, AIService $ai)
     {
         try {
-            $imagick = new Imagick;
-            $imagick->readImage($this->filePath);
+            // Extract text using pdftotext
+            $text = $pdfService->extractNativeText($this->filePath, 1);
+            
+            if (empty(trim($text))) {
+                Log::warning('No text extracted from PDF, trying OCR fallback', [
+                    'article_id' => $article->id,
+                ]);
+                $text = $pdfService->extractTextWithOCR($this->filePath);
+            }
 
-            foreach ($imagick as $i => $page) {
-                $pageNum = $i + 1;
-
-                // Extract text from page (native text or OCR fallback)
-                $nativeText = $pdfService->extractNativeText($this->filePath, $pageNum);
-                $ocrText = $pdfService->extractOCRFromPage($page);
-
-                // Save page
+            // Split text into pages using form feed character or by approximate page length
+            $pages = str_split($text, 1500);
+            
+            foreach ($pages as $pageNum => $pageText) {
                 $articlePage = ArticlePage::create([
                     'article_id' => $article->id,
-                    'page_number' => $pageNum,
-                    'native_text' => $nativeText,
-                    'ocr_text' => $ocrText,
+                    'page_number' => $pageNum + 1,
+                    'native_text' => $pageText,
+                    'ocr_text' => '', // Will be filled if OCR is needed
                 ]);
 
-                // Generate embedding for combined text
-                $combinedText = $nativeText."\n".$ocrText;
-                if (trim($combinedText) !== '') {
-                    // $embedding = $ai->generateEmbedding($combinedText);
-                    // Embedding::create([
-                    //     'embeddable_id' => $articlePage->id,
-                    //     'embeddable_type' => ArticlePage::class,
-                    //     'embedding' => $embedding,
-                    // ]);
-                }
+                // Generate embedding for the page
+                $this->generateAndStoreEmbedding($articlePage, $pageText, $ai);
 
-                // Extract embedded images inside page
-                $this->extractImagesFromPage($page, $articlePage, $ai);
+                // Extract and process images from this page using pdfimages
+                $this->extractAndProcessImages($article, $articlePage, $ai, $pageNum + 1);
             }
+
         } catch (\Exception $e) {
-            Log::info('Error in FileProcessingService->processPdf', ['error' => $e->getMessage()]);
+            Log::error('Error in FileProcessingService->processPdf', [
+                'error' => $e->getMessage(),
+                'article_id' => $article->id,
+                'file_path' => $this->filePath,
+            ]);
+            throw $e;
         }
     }
 
     /**
-     * Process a standalone image file:
-     * - Runs OCR with Tesseract.
-     * - Saves result in ArticlePage.
-     * - Generates embeddings for recognized text.
-     *
-     * @param  string  $path  Relative storage path of the image.
-     * @return void
+     * Extract and process images using pdfimages
      */
-    private function processImage(Article $article, string $path, AIService $ai)
+    private function extractAndProcessImages(Article $article, ArticlePage $articlePage, AIService $ai, int $pageNum): void
     {
         try {
-            // $ocr = (new TesseractOCR(storage_path("app/$path")))->run();
-            $ocr = (new TesseractOCR(Storage::disk('public')->path("images/app/{$path}")))->run();
+            $pdfPath = $this->filePath;
+            $outputDir = storage_path('app/public/pdf_images/' . pathinfo($pdfPath, PATHINFO_FILENAME) . '/page_' . $pageNum);
 
-            $page = ArticlePage::create([
-                'article_id' => $article->id,
-                'page_number' => 1,
-                'ocr_text' => $ocr,
+            if (!file_exists($outputDir)) {
+                mkdir($outputDir, 0777, true);
+            }
+
+            // Use Poppler pdfimages command
+            // The -j flag keeps images in their original format (JPEG, JPX, etc.)
+            // The -f and -l flags specify first and last page to extract images from
+            $pdfimages = 'pdfimages'; // Poppler binary (works if PATH is set)
+            $command = sprintf('"%s" -j -f %d -l %d "%s" "%s"', $pdfimages, $pageNum, $pageNum, $pdfPath, $outputDir . '/image');
+            exec($command, $output, $returnVar);
+
+            if ($returnVar !== 0) {
+                \Log::error('There is no image in there: ' . implode("\n", $output));
+                rmdir($outputDir);
+            } else {
+
+                // Collect results (jpg, png, jp2)
+                $images = collect(glob($outputDir . '/*.{jpg,png,jp2}', GLOB_BRACE))
+                    ->map(fn($img) => str_replace(storage_path('app/public/'), '', $img))
+                    ->values()
+                    ->toArray();
+                
+                if (empty($images)) {
+                    // Delete the directory if no images were found
+                    rmdir($outputDir);
+                } else {
+                    foreach ($images as $imageFile) {
+                        $this->processImageFile($articlePage, $imageFile, $ai);
+                    }
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error in extractAndProcessImages', [
+                'error' => $e->getMessage(),
+                'article_page_id' => $articlePage->id,
+                'page_number' => $pageNum
+            ]);
+        }
+    }
+
+    /**
+     * Process a single image file with OCR
+     */
+    private function processImageFile(ArticlePage $articlePage, string $imagePath, AIService $ai): void
+    {
+        try {
+            $absolutePath = Storage::disk('public')->path($imagePath);
+
+            if (!file_exists($absolutePath)) {
+                Log::error('Image file missing at absolute path', [
+                    'absolute_path' => $absolutePath,
+                    'image_path' => $imagePath,
+                ]);
+                return;
+            }
+            
+            // Run OCR on the image
+            $ocrText = (new TesseractOCR($absolutePath))->run();
+
+            if (empty(trim($ocrText))) {
+                return;
+            }
+
+            // Create image record
+            $image = ArticleImage::create([
+                'article_page_id' => $articlePage->id,
+                'image_path' => $imagePath,
+                'ocr_text' => $ocrText,
             ]);
 
-            // Generate embedding
-            if (trim($ocr) !== '') {
-                // $embedding = $ai->generateEmbedding($ocr);
-                // Embedding::create([
-                //     'embeddable_id' => $page->id,
-                //     'embeddable_type' => ArticlePage::class,
-                //     'embedding' => $embedding,
-                // ]);
-            }
+            // Generate and store embedding
+            $this->generateAndStoreEmbedding($image, $ocrText, $ai, ArticleImage::class);
+
         } catch (\Exception $e) {
-            Log::info('Error in FileProcessingService->processImage', ['error' => $e->getMessage()]);
+            Log::error('Error processing image file', [
+                'error' => $e->getMessage(),
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'image_path' => $imagePath
+            ]);
         }
     }
 
     /**
-     * Extract embedded images from a PDF page:
-     * - Converts the page to PNG.
-     * - Runs OCR on the image.
-     * - Saves result in ArticleImage.
-     * - Generates embeddings for recognized text.
-     *
-     * @return void
+     * Generate and store embedding for a model
      */
-    private function extractImagesFromPage(\Imagick $page, ArticlePage $articlePage, AIService $ai)
+    private function generateAndStoreEmbedding($model, string $text, AIService $ai, string $type = null): void
     {
         try {
-            // Render each page as PNG to extract embedded images
-            $folder = "images/{$articlePage->id}";
-            $fileName = "tmp_page_{$articlePage->page_number}.png";
-
-            Storage::disk('public')->makeDirectory($folder);
-
-            $page->setImageFormat('png');
-            $tmpPath = storage_path("app/{$fileName}");
-            $path = storage_path("app/public/{$folder}/{$fileName}");
-
-            $page->writeImage($tmpPath);
-            $page->writeImage($path);
-
-            // Run OCR on extracted image
-            // $ocr = (new TesseractOCR($tmpPath))->run();
-            $ocr = (new TesseractOCR($path))->run();
-
-            if (trim($ocr) !== '') {
-                $image = ArticleImage::create([
-                    'article_page_id' => $articlePage->id,
-                    'image_path' => "{$folder}/{$fileName}",
-                    'ocr_text' => $ocr,
-                ]);
-
-                // $embedding = $ai->generateEmbedding($ocr);
-                // Embedding::create([
-                //     'embeddable_id' => $image->id,
-                //     'embeddable_type' => ArticleImage::class,
-                //     'embedding' => $embedding,
-                // ]);
-            }
-
-            // unlink($tmpPath);
+            $embedding = $ai->generateEmbedding($text);
+            
+            Embedding::create([
+                'embeddable_id' => $model->id,
+                'embeddable_type' => $type ?: get_class($model),
+                'embedding' => $embedding,
+            ]);
         } catch (\Exception $e) {
-            Log::info('Error in FileProcessingService->extractImagesFromPage', ['error' => $e->getMessage()]);
+            Log::error('Error generating embedding', [
+                'error' => $e->getMessage(),
+                'model_id' => $model->id,
+                'model_type' => $type ?: get_class($model)
+            ]);
+            throw $e;
         }
     }
 
@@ -161,14 +189,16 @@ class FileProcessingService
      * @param  Article  $article  Article model linked to the file.
      * @return void
      */
-    public function check($file, $article)
+    public function check($article, $file = 'pdf')
     {
         try {
             $pdfService = new PdfService;
             $ai = new AIService;
             $this->filePath = Storage::disk('public')->path($article->file_path);
 
-            if ($file->extension() === 'pdf') {
+            \Log::info($this->filePath);
+
+            if ($file === 'pdf') {
                 $this->processPdf($article, $pdfService, $ai);
             } else {
                 $this->processImage($article, $this->filePath, $ai);

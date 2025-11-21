@@ -72,8 +72,69 @@
                                         ? 'bg-blue-600 text-white rounded-br-md' 
                                         : 'bg-gray-50 text-gray-800 border border-gray-200 rounded-bl-md' }}">
                                     <div class="prose prose-sm max-w-none {{ $message['role'] === 'user' ? 'prose-invert' : '' }}">
-                                        {!! nl2br(e($message['content'])) !!}
+                                        @php
+                                            // Convert markdown code blocks to HTML with copy button
+                                            $content = preg_replace_callback(
+                                                '/```(\w*)\n([\s\S]*?)\n```/',
+                                                function($matches) {
+                                                    $language = !empty($matches[1]) ? $matches[1] : 'plaintext';
+                                                    $code = htmlspecialchars($matches[2], ENT_QUOTES, 'UTF-8');
+                                                    return "
+                                                        <div class='code-block relative my-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700'>
+                                                            <div class='flex justify-between items-center bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700'>
+                                                                <span class='text-xs font-mono text-gray-500 dark:text-gray-400'>{$language}</span>
+                                                                <button class='copy-code-btn flex items-center text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300' data-clipboard-text='{$matches[2]}'>
+                                                                    <svg class='w-4 h-4 mr-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                                                        <path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3' />
+                                                                    </svg>
+                                                                    Copy
+                                                                </button>
+                                                            </div>
+                                                            <pre class='m-0 p-4 overflow-x-auto'><code class='language-{$language}'>{$code}</code></pre>
+                                                        </div>
+                                                    ";
+                                                },
+                                                nl2br(e($message['content']))
+                                            );
+                                            // Handle inline code
+                                            $content = preg_replace(
+                                                '/`([^`]+)`/',
+                                                '<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-sm font-mono">$1</code>',
+                                                $content
+                                            );
+                                        @endphp
+                                        {!! $content !!}
                                     </div>
+                                    @push('scripts')
+                                    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.8/clipboard.min.js"></script>
+                                    <script>
+                                        document.addEventListener('livewire:load', function() {
+                                            // Initialize clipboard.js
+                                            new ClipboardJS('.copy-code-btn', {
+                                                text: function(trigger) {
+                                                    return trigger.getAttribute('data-clipboard-text');
+                                                }
+                                            });
+
+                                            // Show feedback when code is copied
+                                            document.addEventListener('click', function(e) {
+                                                if (e.target.closest('.copy-code-btn')) {
+                                                    const btn = e.target.closest('.copy-code-btn');
+                                                    const originalText = btn.innerHTML;
+                                                    btn.innerHTML = `
+                                                        <svg class="w-4 h-4 mr-1 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        Copied!
+                                                    `;
+                                                    setTimeout(() => {
+                                                        btn.innerHTML = originalText;
+                                                    }, 2000);
+                                                }
+                                            });
+                                        });
+                                    </script>
+                                    @endpush
                                 </div>
 
                                 @if(!empty($message['sources']))
