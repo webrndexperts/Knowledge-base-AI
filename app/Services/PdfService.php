@@ -118,7 +118,7 @@ class PdfService
      * @param  string  $filePath  Path to the PDF file.
      * @return string OCR-extracted text from all pages.
      */
-    private function extractTextWithOCR(string $filePath): string
+    public function extractTextWithOCR(string $filePath): string
     {
         $output = '';
 

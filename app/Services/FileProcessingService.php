@@ -7,7 +7,6 @@ use App\Models\Articles\ArticleImage;
 use App\Models\Articles\ArticlePage;
 use App\Models\Articles\Embedding;
 use Illuminate\Support\Facades\Storage;
-use Imagick;
 use Log;
 use thiagoalessio\TesseractOCR\TesseractOCR;
 
@@ -27,7 +26,7 @@ class FileProcessingService
         try {
             // Extract text using pdftotext
             $text = $pdfService->extractNativeText($this->filePath, 1);
-            
+
             if (empty(trim($text))) {
                 Log::warning('No text extracted from PDF, trying OCR fallback', [
                     'article_id' => $article->id,
@@ -37,7 +36,7 @@ class FileProcessingService
 
             // Split text into pages using form feed character or by approximate page length
             $pages = str_split($text, 1500);
-            
+
             foreach ($pages as $pageNum => $pageText) {
                 $articlePage = ArticlePage::create([
                     'article_id' => $article->id,
@@ -70,9 +69,9 @@ class FileProcessingService
     {
         try {
             $pdfPath = $this->filePath;
-            $outputDir = storage_path('app/public/pdf_images/' . pathinfo($pdfPath, PATHINFO_FILENAME) . '/page_' . $pageNum);
+            $outputDir = storage_path('app/public/pdf_images/'.pathinfo($pdfPath, PATHINFO_FILENAME).'/page_'.$pageNum);
 
-            if (!file_exists($outputDir)) {
+            if (! file_exists($outputDir)) {
                 mkdir($outputDir, 0777, true);
             }
 
@@ -80,20 +79,20 @@ class FileProcessingService
             // The -j flag keeps images in their original format (JPEG, JPX, etc.)
             // The -f and -l flags specify first and last page to extract images from
             $pdfimages = 'pdfimages'; // Poppler binary (works if PATH is set)
-            $command = sprintf('"%s" -j -f %d -l %d "%s" "%s"', $pdfimages, $pageNum, $pageNum, $pdfPath, $outputDir . '/image');
+            $command = sprintf('"%s" -j -f %d -l %d "%s" "%s"', $pdfimages, $pageNum, $pageNum, $pdfPath, $outputDir.'/image');
             exec($command, $output, $returnVar);
 
             if ($returnVar !== 0) {
-                \Log::error('There is no image in there: ' . implode("\n", $output));
+                \Log::error('There is no image in there: '.implode("\n", $output));
                 rmdir($outputDir);
             } else {
 
                 // Collect results (jpg, png, jp2)
-                $images = collect(glob($outputDir . '/*.{jpg,png,jp2}', GLOB_BRACE))
-                    ->map(fn($img) => str_replace(storage_path('app/public/'), '', $img))
+                $images = collect(glob($outputDir.'/*.{jpg,png,jp2}', GLOB_BRACE))
+                    ->map(fn ($img) => str_replace(storage_path('app/public/'), '', $img))
                     ->values()
                     ->toArray();
-                
+
                 if (empty($images)) {
                     // Delete the directory if no images were found
                     rmdir($outputDir);
@@ -108,7 +107,7 @@ class FileProcessingService
             Log::error('Error in extractAndProcessImages', [
                 'error' => $e->getMessage(),
                 'article_page_id' => $articlePage->id,
-                'page_number' => $pageNum
+                'page_number' => $pageNum,
             ]);
         }
     }
@@ -121,14 +120,15 @@ class FileProcessingService
         try {
             $absolutePath = Storage::disk('public')->path($imagePath);
 
-            if (!file_exists($absolutePath)) {
+            if (! file_exists($absolutePath)) {
                 Log::error('Image file missing at absolute path', [
                     'absolute_path' => $absolutePath,
                     'image_path' => $imagePath,
                 ]);
+
                 return;
             }
-            
+
             // Run OCR on the image
             $ocrText = (new TesseractOCR($absolutePath))->run();
 
@@ -149,10 +149,10 @@ class FileProcessingService
         } catch (\Exception $e) {
             Log::error('Error processing image file', [
                 'error' => $e->getMessage(),
-                'file'  => $e->getFile(),
-                'line'  => $e->getLine(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
-                'image_path' => $imagePath
+                'image_path' => $imagePath,
             ]);
         }
     }
@@ -160,11 +160,11 @@ class FileProcessingService
     /**
      * Generate and store embedding for a model
      */
-    private function generateAndStoreEmbedding($model, string $text, AIService $ai, string $type = null): void
+    private function generateAndStoreEmbedding($model, string $text, AIService $ai, ?string $type = null): void
     {
         try {
             $embedding = $ai->generateEmbedding($text);
-            
+
             Embedding::create([
                 'embeddable_id' => $model->id,
                 'embeddable_type' => $type ?: get_class($model),
@@ -174,9 +174,44 @@ class FileProcessingService
             Log::error('Error generating embedding', [
                 'error' => $e->getMessage(),
                 'model_id' => $model->id,
-                'model_type' => $type ?: get_class($model)
+                'model_type' => $type ?: get_class($model),
             ]);
             throw $e;
+        }
+    }
+
+    /**
+     * Process a standalone image file:
+     * - Runs OCR with Tesseract.
+     * - Saves result in ArticlePage.
+     * - Generates embeddings for recognized text.
+     *
+     * @param  string  $path  Relative storage path of the image.
+     * @return void
+     */
+    private function processImage(Article $article, string $path, AIService $ai)
+    {
+        try {
+            // $ocr = (new TesseractOCR(storage_path("app/$path")))->run();
+            $ocr = (new TesseractOCR(Storage::disk('public')->path("images/app/{$path}")))->run();
+
+            $page = ArticlePage::create([
+                'article_id' => $article->id,
+                'page_number' => 1,
+                'ocr_text' => $ocr,
+            ]);
+
+            // Generate embedding
+            if (trim($ocr) !== '') {
+                $embedding = $ai->generateEmbedding($ocr);
+                Embedding::create([
+                    'embeddable_id' => $page->id,
+                    'embeddable_type' => ArticlePage::class,
+                    'embedding' => $embedding,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::info('Error in FileProcessingService->processImage', ['error' => $e->getMessage()]);
         }
     }
 
@@ -185,8 +220,8 @@ class FileProcessingService
      * - If PDF → processPdf().
      * - Else (image) → processImage().
      *
-     * @param  \Illuminate\Http\UploadedFile  $file  Uploaded file instance.
      * @param  Article  $article  Article model linked to the file.
+     * @param  string  $file  type of file.
      * @return void
      */
     public function check($article, $file = 'pdf')

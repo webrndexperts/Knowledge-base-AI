@@ -38,8 +38,8 @@ class RoleCrud extends Component
     public function render()
     {
         $roles = Role::when($this->search, function ($query) {
-                return $query->where('name', 'like', '%'.$this->search.'%');
-            })
+            return $query->where('name', 'like', '%'.$this->search.'%');
+        })
             ->with('permissions')
             ->whereNot('name', 'admin')
             ->paginate($this->perPage);

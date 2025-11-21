@@ -35,6 +35,7 @@ class ConversationSidebar extends Component
     public function loadConversations()
     {
         if (Auth::check()) {
+            // @phpstan-ignore-next-line
             $this->conversations = Conversation::where('user_id', Auth::id())
                 ->with('latestQuery')
                 ->orderBy('updated_at', 'desc')

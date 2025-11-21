@@ -2,10 +2,10 @@
 
 namespace App\Livewire\Admin;
 
+use App\Jobs\ProcessPdfUploadJob;
 use App\Models\Article;
 use App\Models\User;
 use App\Services\FileProcessingService;
-use App\Jobs\ProcessPdfUploadJob;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -70,12 +70,12 @@ class PdfUploader extends Component
                 $this->fileSelected = false;
             } catch (\Exception $e) {
                 $this->dispatch('notify', message: $e->getMessage(), type: 'error');
-                \Log::error('Error dispatching PDF upload job: ' . $e->getMessage());
+                \Log::error('Error dispatching PDF upload job: '.$e->getMessage());
             }
         } catch (\Throwable $th) {
             $this->dispatch('notify', message: __('messages.notify.upload.failed'), type: 'error');
-            \Log::error('Error uploading PDF: ' . $th->getMessage());
-        } 
+            \Log::error('Error uploading PDF: '.$th->getMessage());
+        }
     }
 
     public function render()
