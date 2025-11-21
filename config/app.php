@@ -123,4 +123,43 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | pdftotext binary path
+    |--------------------------------------------------------------------------
+    |
+    | This tells Laravel where to find the "pdftotext" executable from Poppler.
+    | - On Linux/macOS: you can usually leave it as "pdftotext" if Poppler is
+    |   installed and available in your system PATH.
+    | - On Windows: set the full path to pdftotext.exe, for example:
+    |   "C:/tools/poppler/bin/pdftotext.exe"
+    |
+    | You can override this in your .env file:
+    |   PDFTOTEXT_PATH="C:/tools/poppler/bin/pdftotext.exe"
+    |
+    */
+
+    'pdftotext_path' => env('PDFTOTEXT_PATH', 'pdftotext'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Ghostscript binary path
+    |--------------------------------------------------------------------------
+    |
+    | This tells Laravel where to find the Ghostscript executable.
+    | Ghostscript is required by ImageMagick to process PDF files.
+    |
+    | - On Linux/macOS: usually "gs" if installed in PATH
+    | - On Windows: set the full path to gswin64c.exe or gswin32c.exe, for example:
+    |   "C:/Program Files/gs/gs10.04.0/bin/gswin64c.exe"
+    |
+    | You can override this in your .env file:
+    |   GHOSTSCRIPT_PATH="C:/Program Files/gs/gs10.04.0/bin/gswin64c.exe"
+    |
+    | If not set or Ghostscript is not installed, PDF processing will be skipped
+    | with a warning logged.
+    |
+    */
+
+    'ghostscript_path' => env('GHOSTSCRIPT_PATH', null),
 ];
